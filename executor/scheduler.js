@@ -7,6 +7,7 @@
 import cron from 'node-cron'
 import { getTaskGroups } from '../lib/conf-loader.js'
 import { runTask } from './task-runner.js'
+import { resolveTaskCron, loadConfig, isTaskEnabledByConfig } from '../lib/config.js'
 
 const _tasks = []
 
@@ -17,8 +18,21 @@ const _tasks = []
  */
 export function scheduleTask(task, ctx) {
   if (!task.cron || task.cron === 'basic') return null
-  // 先用 resolveCron 把 ${hour}$ / $hour$ 等模板变量替换成默认值
-  const expr = normalizeCron(resolveCron(task, {}))
+
+  // 1. 先尝试 config 中的覆盖
+  const override = resolveTaskCron(task.id)
+  let expr
+  if (override === null) {
+    // 用户在 config.yaml 中设为 "disable"
+    console.log(`[xa] ${task.id}: 定时已禁用 (config.yaml taskCronOverrides)`)
+    return null
+  } else if (override !== undefined) {
+    expr = override
+  } else {
+    // 用 xa_conf.yaml 的默认
+    expr = normalizeCron(resolveCron(task, {}))
+  }
+
   if (!cron.validate(expr)) {
     console.warn('[xa] invalid cron:', task.cron, '->', expr)
     return null
