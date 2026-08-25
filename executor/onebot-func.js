@@ -1,114 +1,278 @@
 /**
- * onebot-func.js — Function 任务通过 OneBot API 模拟
+ * onebot-func.js — Function 任务通过 OneBot / HTTP 模拟
  *
- * XAutoDaily 通过 Xposed Hook 调用 QQ 内部 SDK 实现:
- *   - 群打卡 OIDB 0xeb7 → Yunzai 无法直接发 OIDB，退化为通过 bot.sendGroupMsg 等
- *   - 好友名片点赞 OIDB → 暂不支持
- *   - 续火 sendMsg → 通过 bot.sendGroupMsg / sendPrivateMsg
- *   - 公众号签到 → 通过 sendGroupMsg 给公众号
- *   - QZone 亲密空间签到 → 暂不支持
- *   - YunDong 步数上报 → HTTP 调用
- *   - Favorite 收藏点赞 → 暂不支持
+ * 参考:
+ *   - [Task]群打卡&诗词续火&抽字符 V1.1 by 傅卿何 (https://github.com/Tloml-Starry/Plugin-Example)
+ *   - XAutoDaily 的 xa://Manager/method 协议
  *
  * 函数 task URL 格式: xa://Manager/method?param=value&param2=value2
  */
 import { format } from '../lib/env-format.js'
+import { post as httpPost, get as httpGet } from '../lib/http.js'
+import * as cookie from '../lib/cookie.js'
 
 const HANDLERS = {}
 
 function register(prefix, handler) { HANDLERS[prefix] = handler }
 
 /**
- * 群打卡 — 通过 Yunzai 的 bot API
- * 注: 真正 OIDB 0xeb7 需要 QQ 客户端进程内部权限，外部 bot 难以发
- * 这里用兼容做法：调用 Yunzai 的 Bot.sendApi('group_sign', { group_id })
+ * 获取 bot 列表（兼容 Yunzai 的 Bot[qq] / Bot.pickGroup）
+ * 返回首个可用 bot 实例
+ */
+function pickBot(ctx) {
+  const b = ctx.bot
+  if (!b) return null
+  // Yunzai 风格: b.pickGroup(id)
+  if (typeof b.pickGroup === 'function') return b
+  // OneBot 风格: b.sendGroupMsg / sendPrivateMsg
+  if (typeof b.sendGroupMsg === 'function' || typeof b.sendApi === 'function') return b
+  return b
+}
+
+/**
+ * 群打卡 — 通过 bot.pickGroup(id).sign()
+ *
+ * Yunzai (icqq / go-cqhttp / LLOneBot) 的 Bot.pickGroup(...).sign()
+ * 内部封装了 OneBot set_group_sign 或对应的群打卡协议。
+ * 这是真正可用的群打卡方式。
+ *
+ * reqUrl: xa://GroupSignInManager/signIn?uin=${groups}$
  */
 register('GroupSignInManager/signIn', async (task, env, ctx, query) => {
-  const { bot } = ctx
-  const uin = query.uin || env.uin || env.groups
-  if (!uin) return { ok: false, msg: 'missing group uin' }
-  const uins = Array.isArray(uin) ? uin : [uin]
+  const bot = pickBot(ctx)
+  if (!bot) return { ok: false, msg: 'no bot available' }
+
+  // 从 query / env 拿群列表
+  const groupsRaw = query.uin || env.uin || env.groups || []
+  const groups = (Array.isArray(groupsRaw) ? groupsRaw : String(groupsRaw).split(','))
+    .map(s => String(s).trim()).filter(Boolean)
+
+  // 如果用户没指定群，遍历 bot 自己的群列表
+  let targetGroups = groups
+  if (targetGroups.length === 0) {
+    // Yunzai: Bot.gl 是 Map<group_id, GroupInfo>
+    if (bot.gl && typeof bot.gl.keys === 'function') {
+      targetGroups = [...bot.gl.keys()]
+    } else if (typeof bot.getGroupList === 'function') {
+      const list = await bot.getGroupList()
+      targetGroups = (list || []).map(g => g.group_id || g)
+    }
+  }
+
+  if (targetGroups.length === 0) {
+    return { ok: false, msg: '未指定打卡群，且 bot 没有群列表' }
+  }
+
   const results = []
-  for (const gid of uins) {
+  for (const gid of targetGroups) {
     try {
-      if (bot && bot.sendApi) {
-        try {
-          const r = await bot.sendApi('group_sign', { group_id: gid })
-          results.push({ group: gid, ok: true, data: r })
+      // 优先用 Yunzai 风格的 pickGroup().sign()
+      if (typeof bot.pickGroup === 'function') {
+        const group = bot.pickGroup(Number(gid) || gid)
+        if (group && typeof group.sign === 'function') {
+          const r = await group.sign()
+          results.push({ group: gid, ok: true, method: 'pickGroup.sign', data: r })
           continue
-        } catch {}
+        }
       }
-      results.push({ group: gid, ok: false, msg: 'OneBot 不支持群打卡 OIDB，需要 Xposed' })
+      // fallback: 通过 sendApi
+      if (typeof bot.sendApi === 'function') {
+        const r = await bot.sendApi('set_group_sign', { group_id: Number(gid) || gid })
+        results.push({ group: gid, ok: true, method: 'sendApi', data: r })
+        continue
+      }
+      // fallback: sendGroupMsg 模拟（部分协议把消息发到群就视为打卡）
+      if (typeof bot.sendGroupMsg === 'function') {
+        await bot.sendGroupMsg(Number(gid) || gid, '签到')
+        results.push({ group: gid, ok: true, method: 'sendMsg', data: '已发送消息' })
+        continue
+      }
+      results.push({ group: gid, ok: false, msg: 'bot 不支持群打卡' })
     } catch (e) {
       results.push({ group: gid, ok: false, msg: e.message })
     }
+    if (task.delay) await sleep((task.delay || 2) * 1000)
   }
-  return { ok: results.some(r => r.ok), data: results }
+  const okCount = results.filter(r => r.ok).length
+  return { ok: okCount > 0, data: results, summary: `${okCount}/${results.length} 群打卡成功` }
 })
 
 /**
- * 群组续火 — 发送消息
+ * 抽字符 — 通过 HTTP 调用 qun.qq.com 接口
+ *
+ * 借鉴 Plugin-Example 的实现：
+ *   POST https://qun.qq.com/v2/luckyword/proxy/domain/qun.qq.com/cgi-bin/group_lucky_word/draw_lottery?bkn=...
+ *   body: {"group_code": <gid>}
+ *   headers: Cookie (qun.qq.com), qname-service, qname-space
+ *
+ * 不再依赖 Yunzai bot API（icqq 没有封装），用纯 HTTP。
+ *
+ * reqUrl: xa://GroupLuckyWordManager/draw?uin=${groups}$&count=${count}$
+ */
+register('GroupLuckyWordManager/draw', async (task, env, ctx, query) => {
+  const { uin } = ctx
+  const groupsRaw = query.uin || env.uin || env.groups || []
+  const groups = (Array.isArray(groupsRaw) ? groupsRaw : String(groupsRaw).split(','))
+    .map(s => String(s).trim()).filter(Boolean)
+  const count = parseInt(query.count || env.count || '1', 10)
+
+  if (groups.length === 0) {
+    // 没有群就遍历 bot 的群
+    const bot = pickBot(ctx)
+    if (bot?.gl) {
+      for (const gid of bot.gl.keys()) groups.push(String(gid))
+    }
+  }
+
+  const ckObj = cookie.get(uin, 'qun.qq.com') || cookie.get(uin, 'global') || {}
+  const bkn = (() => {
+    const s = ckObj.p_skey || ckObj.skey || ''
+    let h = 5381
+    for (const c of s) h = ((h << 5) + h + c.charCodeAt(0)) & 0x7fffffff
+    return h
+  })()
+
+  const cookieStr = cookie.stringify(ckObj)
+  const url = `https://qun.qq.com/v2/luckyword/proxy/domain/qun.qq.com/cgi-bin/group_lucky_word/draw_lottery?bkn=${bkn}`
+  const results = []
+  for (const gid of groups) {
+    for (let i = 0; i < count; i++) {
+      try {
+        const res = await httpPost(url, {
+          headers: {
+            'Content-Type': 'application/json;charset=UTF-8',
+            'Cookie': cookieStr,
+            'qname-service': '976321:131072',
+            'qname-space': 'Production',
+          },
+          body: { group_code: gid },
+        })
+        const j = res.json || {}
+        const ok = j.retcode === 0
+        const word = j?.data?.word_info?.word_info || {}
+        results.push({
+          group: gid, ok, retcode: j.retcode,
+          wording: word.wording, desc: word.word_desc, raw: j,
+        })
+      } catch (e) {
+        results.push({ group: gid, ok: false, msg: e.message })
+      }
+    }
+  }
+  const okCount = results.filter(r => r.ok).length
+  return { ok: okCount > 0, data: results, summary: `${okCount}/${results.length} 抽字符成功` }
+})
+
+/**
+ * 群续火 — 通过 bot.pickGroup(id).sendMsg(msg)
+ *
+ * 参考 Plugin-Example:
+ *   Bot[QQ].pickGroup(ID).sendMsg(msg + tips);
+ *
+ * 默认从 oiapi.net 拿诗词作为续火文案（与参考插件一致）
+ *
  * reqUrl: xa://SendMessageManager/sendMessage/group?uin=${groups}$&msg=${message}$
  */
 register('SendMessageManager/sendMessage/group', async (task, env, ctx, query) => {
-  const { bot } = ctx
-  const groups = Array.isArray(query.uin) ? query.uin : (query.uin ? [query.uin] : (Array.isArray(env.groups) ? env.groups : []))
-  const message = query.msg || env.message || '续火~'
-  if (!bot || !bot.sendGroupMsg) return { ok: false, msg: 'no bot api' }
+  const bot = pickBot(ctx)
+  if (!bot) return { ok: false, msg: 'no bot available' }
+
+  const groupsRaw = query.uin || env.uin || env.groups || []
+  let groups = (Array.isArray(groupsRaw) ? groupsRaw : String(groupsRaw).split(','))
+    .map(s => String(s).trim()).filter(Boolean)
+  if (groups.length === 0 && bot.gl) {
+    groups = [...bot.gl.keys()].map(String)
+  }
+
+  // 续火文案 (按优先级): task.envs.message → query.msg → 远程诗词 API → 默认 '火'
+  let msg = query.msg || env.message || ''
+  if (!msg) {
+    msg = await fetchSentence() || '火'
+  }
+  // 支持 msg1|msg2|msg3 随机
+  const candidates = msg.split('|').map(s => s.trim()).filter(Boolean)
+  const finalMsg = candidates[Math.floor(Math.random() * candidates.length)] || msg
+
   const results = []
   for (const gid of groups) {
     try {
-      const msgs = message.split('|').map(s => s.trim()).filter(Boolean)
-      const msg = msgs[Math.floor(Math.random() * msgs.length)] || message
-      await bot.sendGroupMsg(gid, msg)
-      results.push({ group: gid, ok: true, msg })
-      if (task.delay) await sleep((task.delay || 10) * 1000)
+      if (typeof bot.pickGroup === 'function') {
+        await bot.pickGroup(Number(gid) || gid).sendMsg(finalMsg)
+      } else if (typeof bot.sendGroupMsg === 'function') {
+        await bot.sendGroupMsg(Number(gid) || gid, finalMsg)
+      } else {
+        results.push({ group: gid, ok: false, msg: 'bot 不支持发群消息' })
+        continue
+      }
+      results.push({ group: gid, ok: true, msg: finalMsg })
     } catch (e) {
       results.push({ group: gid, ok: false, msg: e.message })
     }
+    if (task.delay) await sleep((task.delay || 60) * 1000)
   }
-  return { ok: results.every(r => r.ok), data: results }
+  const okCount = results.filter(r => r.ok).length
+  return { ok: okCount > 0, data: results, summary: `${okCount}/${results.length} 群续火成功` }
 })
 
 /**
  * 好友续火
+ *
+ * reqUrl: xa://SendMessageManager/sendMessage/friend?uin=${friends}$&msg=${message}$
  */
 register('SendMessageManager/sendMessage/friend', async (task, env, ctx, query) => {
-  const { bot } = ctx
-  const friends = Array.isArray(query.uin) ? query.uin : (query.uin ? [query.uin] : (Array.isArray(env.friends) ? env.friends : []))
-  const message = query.msg || env.message || '续火~'
-  if (!bot || !bot.sendPrivateMsg) return { ok: false, msg: 'no bot api' }
+  const bot = pickBot(ctx)
+  if (!bot) return { ok: false, msg: 'no bot available' }
+
+  const friendsRaw = query.uin || env.uin || env.friends || []
+  let friends = (Array.isArray(friendsRaw) ? friendsRaw : String(friendsRaw).split(','))
+    .map(s => String(s).trim()).filter(Boolean)
+
+  let msg = query.msg || env.message || '续火~'
+  const candidates = msg.split('|').map(s => s.trim()).filter(Boolean)
+  const finalMsg = candidates[Math.floor(Math.random() * candidates.length)] || msg
+
   const results = []
   for (const fid of friends) {
     try {
-      const msgs = message.split('|').map(s => s.trim()).filter(Boolean)
-      const msg = msgs[Math.floor(Math.random() * msgs.length)] || message
-      await bot.sendPrivateMsg(fid, msg)
-      results.push({ friend: fid, ok: true, msg })
-      if (task.delay) await sleep((task.delay || 10) * 1000)
+      if (typeof bot.pickFriend === 'function') {
+        await bot.pickFriend(Number(fid) || fid).sendMsg(finalMsg)
+      } else if (typeof bot.sendPrivateMsg === 'function') {
+        await bot.sendPrivateMsg(Number(fid) || fid, finalMsg)
+      } else {
+        results.push({ friend: fid, ok: false, msg: 'bot 不支持发私聊' })
+        continue
+      }
+      results.push({ friend: fid, ok: true, msg: finalMsg })
     } catch (e) {
       results.push({ friend: fid, ok: false, msg: e.message })
     }
+    if (task.delay) await sleep((task.delay || 10) * 1000)
   }
-  return { ok: results.every(r => r.ok), data: results }
+  const okCount = results.filter(r => r.ok).length
+  return { ok: okCount > 0, data: results, summary: `${okCount}/${results.length} 好友续火成功` }
 })
 
 /**
- * 公众号签到
+ * 公众号签到 (VIP 公众号 80011503)
  */
 register('PublicAccountManager/vipPublicAccountSignIn', async (task, env, ctx) => {
-  const { bot } = ctx
-  if (!bot || !bot.sendPrivateMsg) return { ok: false, msg: 'no bot api' }
+  const bot = pickBot(ctx)
+  if (!bot) return { ok: false, msg: 'no bot available' }
   const mpUin = '80011503'
   try {
-    if (bot.sendApi) {
-      try {
-        const r = await bot.sendApi('send_like', { user_id: mpUin, times: 1 })
-        return { ok: true, data: r }
-      } catch {}
+    if (typeof bot.sendApi === 'function') {
+      const r = await bot.sendApi('send_like', { user_id: mpUin, times: 1 })
+      return { ok: true, method: 'send_like', data: r }
     }
-    await bot.sendPrivateMsg(mpUin, '签到')
-    return { ok: true, msg: '已发送消息' }
+    if (typeof bot.pickFriend === 'function') {
+      await bot.pickFriend(mpUin).sendMsg('签到')
+      return { ok: true, method: 'sendMsg', msg: '已发送消息' }
+    }
+    if (typeof bot.sendPrivateMsg === 'function') {
+      await bot.sendPrivateMsg(mpUin, '签到')
+      return { ok: true, method: 'sendPrivateMsg', msg: '已发送消息' }
+    }
+    return { ok: false, msg: 'bot 不支持任何方式' }
   } catch (e) {
     return { ok: false, msg: e.message }
   }
@@ -119,9 +283,8 @@ register('PublicAccountManager/vipPublicAccountSignIn', async (task, env, ctx) =
  */
 register('YunDongStepsManager/reportSteps', async (task, env, ctx, query) => {
   const steps = parseInt(query.steps || env.steps || '8000', 10)
-  const { post } = await import('../lib/http.js')
   try {
-    const res = await post('https://yundong.qq.com/cgi-bin/yundong/report_steps', {
+    const res = await httpPost('https://yundong.qq.com/cgi-bin/yundong/report_steps', {
       headers: { 'Content-Type': 'application/json' },
       body: { steps },
     })
@@ -139,7 +302,7 @@ register('QZIntimateSpaceManager/doCheckInRequest', async () => {
 })
 
 /**
- * 好友点赞
+ * 好友名片点赞
  */
 register('FavoriteManager/favoriteAllVoter', async () => {
   return { ok: false, msg: '好友名片点赞需要 OIDB 协议，外部 bot 暂不支持' }
@@ -157,7 +320,6 @@ export async function runFuncTask(task, env, ctx) {
   if (!url.startsWith('xa://')) {
     return { ok: false, msg: 'invalid func url: ' + url }
   }
-  // 解析 xa://Manager/method?param=value
   const rest = url.slice('xa://'.length)
   const qIdx = rest.indexOf('?')
   let path = rest
@@ -166,7 +328,6 @@ export async function runFuncTask(task, env, ctx) {
     path = rest.slice(0, qIdx)
     queryStr = rest.slice(qIdx + 1)
   }
-  // 把 query 参数解析成对象，并执行 ${var}$ 替换
   const query = parseQuery(queryStr, env)
   const handler = HANDLERS[path]
   if (!handler) {
@@ -189,3 +350,15 @@ function parseQuery(qs, env) {
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
+
+/**
+ * 从远程 API 拿一句诗词作为续火文案
+ */
+async function fetchSentence() {
+  try {
+    const res = await httpGet('https://oiapi.net/API/Sentences', { timeout: 5000 })
+    const j = res.json || {}
+    if (j.code === 1 && j.message) return String(j.message).slice(0, 80)
+  } catch {}
+  return null
+}
