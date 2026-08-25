@@ -1,9 +1,5 @@
 # yunzai_qqlevel
 
-> **把 XAutoDaily 全部签到/任务功能移植到 Yunzai-Bot 平台**
->
-> 基于 [LuckyPray/XAutoDaily](https://github.com/LuckyPray/XAutoDaily) 的任务配置 (`xa_conf.yaml`，已解密内置) 与 [aioqzone/qqqr](https://github.com/aioqzone/aioqzone) 的 QR 登录思路。
-
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Yunzai](https://img.shields.io/badge/Yunzai-Bot-blue)](https://github.com/Le-niao/Yunzai-Bot)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)]()
