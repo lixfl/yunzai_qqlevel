@@ -115,7 +115,7 @@ register('GroupSignInManager/signIn', async (task, env, ctx, query) => {
 register('GroupLuckyWordManager/draw', async (task, env, ctx, query) => {
   const { uin } = ctx
   const groupsRaw = query.uin || env.uin || env.groups || []
-  const groups = (Array.isArray(groupsRaw) ? groupsRaw : String(groupsRaw).split(','))
+  let groups = (Array.isArray(groupsRaw) ? groupsRaw : String(groupsRaw).split(','))
     .map(s => String(s).trim()).filter(Boolean)
   const count = parseInt(query.count || env.count || '1', 10)
 

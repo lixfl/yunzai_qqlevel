@@ -81,6 +81,61 @@ function parseEnvValue(env) {
 /**
  * 执行单个 task
  */
+/**
+ * 查找同 group 中指定 id 的 task (用于 relay/rear 引用)
+ */
+function findTaskById(taskId, ctx) {
+  // 先查 ctx.currentGroup
+  const grp = ctx.currentGroup
+  if (grp && grp.tasks) {
+    const t = grp.tasks.find(x => x.id === taskId)
+    if (t) return t
+  }
+  if (grp && grp.preTasks) {
+    const t = grp.preTasks.find(x => x.id === taskId)
+    if (t) return t
+  }
+  return null
+}
+
+/**
+ * 执行 relay 链 (前置任务,如"加好友")
+ */
+async function runRelayChain(task, ctx) {
+  if (!task.relay) return { ok: true, skipped: true }
+  const relayNames = String(task.relay).split('|').map(s => s.trim()).filter(Boolean)
+  const out = []
+  for (const name of relayNames) {
+    const subTask = findTaskById(name, ctx)
+    if (!subTask) {
+      out.push({ relay: name, ok: false, msg: 'relay task not found' })
+      continue
+    }
+    const r = await runTask(subTask, ctx)
+    out.push({ relay: name, ok: r.ok, msg: r.msg || '' })
+  }
+  return { ok: out.every(r => r.ok), chain: out }
+}
+
+/**
+ * 执行 rear 链 (后置任务,如"删好友")
+ */
+async function runRearChain(task, ctx) {
+  if (!task.rear) return { ok: true, skipped: true }
+  const rearNames = String(task.rear).split('|').map(s => s.trim()).filter(Boolean)
+  const out = []
+  for (const name of rearNames) {
+    const subTask = findTaskById(name, ctx)
+    if (!subTask) {
+      out.push({ rear: name, ok: false, msg: 'rear task not found' })
+      continue
+    }
+    const r = await runTask(subTask, ctx)
+    out.push({ rear: name, ok: r.ok, msg: r.msg || '' })
+  }
+  return { ok: out.every(r => r.ok), chain: out }
+}
+
 export async function runTask(task, ctx = {}) {
   const { uin, groupId, bot, logger } = ctx
   const allCks = cookie.getAll(uin)
@@ -95,6 +150,8 @@ export async function runTask(task, ctx = {}) {
     time: Date.now(),
     microsecond: Date.now() * 1000,
     timeSecond: Math.floor(Date.now() / 1000),
+    // ti.qq.com 接口需要的 qua 字段 (QQ 标准 UA)
+    qua: 'V1_IPH_SQ_9.1.0_0_TIM_YYB_9.1.0_8_a52b32d3',
   }
   for (const e of (task.envs || [])) {
     if (baseEnv[e.name] == null) baseEnv[e.name] = e.default
@@ -104,10 +161,29 @@ export async function runTask(task, ctx = {}) {
   const type = task.type || 'web'
 
   try {
-    if ((task.reqUrl || '').startsWith('xa://')) {
-      return await oneBot.runFuncTask(task, env, ctx)
+    // 1. 执行 relay 链 (前置任务)
+    if (task.relay) {
+      const relay = await runRelayChain(task, ctx)
+      if (!relay.ok) {
+        return { ok: false, msg: 'relay failed', relay }
+      }
     }
-    return await runHttpTask(task, env, ctx)
+
+    // 2. 执行主任务
+    let mainResult
+    if ((task.reqUrl || '').startsWith('xa://')) {
+      mainResult = await oneBot.runFuncTask(task, env, ctx)
+    } else {
+      mainResult = await runHttpTask(task, env, ctx)
+    }
+
+    // 3. 执行 rear 链 (后置任务) - 即使主任务失败也要执行清理
+    if (task.rear) {
+      const rear = await runRearChain(task, ctx)
+      mainResult.rear = rear
+    }
+
+    return mainResult
   } catch (e) {
     logger && logger.error && logger.error('[xa]', task.id, 'failed:', e.message)
     return { ok: false, msg: e.message }
@@ -175,11 +251,13 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
  */
 export async function runTaskGroup(group, ctx = {}) {
   const out = []
+  // 把 currentGroup 注入 ctx,供 relay/rear 查找同组内的 task
+  const groupCtx = { ...ctx, currentGroup: group }
   for (const task of (group.tasks || [])) {
     for (const pre of (group.preTasks || [])) {
-      out.push(await runTask(pre, ctx))
+      out.push(await runTask(pre, groupCtx))
     }
-    out.push(await runTask(task, ctx))
+    out.push(await runTask(task, groupCtx))
   }
   return out
 }
