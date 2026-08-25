@@ -3,20 +3,25 @@
  * Yunzai-Bot 插件入口
  *
  * 命令:
- *   #qq登录                  - QR 登录获取 cookie
- *   #qq签到                  - 立即执行所有启用的任务
- *   #qq任务列表              - 列出所有任务
- *   #qq启用任务 <id>         - 启用任务
- *   #qq禁用任务 <id>         - 禁用任务
- *   #qq任务详情 <id>         - 任务详情
- *   #qq刷新ck                - 同 #qq登录
- *   #qq签到帮助              - 显示帮助
- *   #qqck                    - 查看当前 cookie 状态
+ *   #qq登录 [domain]       - QR 登录获取 cookie (domain 可选,默认 vip.qq.com)
+ *   #qq登录 all            - 多域扫码登录 (会连续弹出多个二维码,按提示扫码)
+ *   #qq登录 列表           - 显示支持的登录域列表
+ *   #qq签到                - 立即执行所有启用的任务
+ *   #qq任务列表            - 列出所有任务
+ *   #qq启用任务 <id>       - 启用任务
+ *   #qq禁用任务 <id>       - 禁用任务
+ *   #qq任务详情 <id>       - 任务详情
+ *   #qq刷新ck [domain]     - 同 #qq登录
+ *   #qq签到帮助            - 显示帮助
+ *   #qqck                  - 查看当前 cookie 状态
+ *
+ * 支持的登录域 (来自 PyQQSkeyTool):
+ *   qzone.qq.com, qun.qq.com, vip.qq.com, mail.qq.com, weiyun.com, accounts.qq.com
  */
 import fs from 'node:fs'
 import path from 'node:path'
 import url from 'node:url'
-import { loginFlow, fetchQRCode } from './lib/login.js'
+import { loginFlow, loginDomain, loginMultiDomain, fetchQRCode, LOGIN_DOMAINS, DEFAULT_DOMAIN } from './lib/login.js'
 import * as cookie from './lib/cookie.js'
 import { getTaskGroups } from './lib/conf-loader.js'
 import { runTask } from './executor/task-runner.js'
@@ -26,7 +31,6 @@ const __dirname = path.dirname(url.fileURLToPath(import.meta.url))
 const DATA_DIR = path.resolve(__dirname, 'data')
 const STATE_FILE = path.join(DATA_DIR, 'tasks-state.json')
 
-// 任务启用状态（持久化）
 function loadState() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
   if (!fs.existsSync(STATE_FILE)) fs.writeFileSync(STATE_FILE, '{}', 'utf8')
@@ -39,7 +43,6 @@ function saveState(s) {
 
 function isEnabled(taskId) {
   const s = loadState()
-  // 默认启用，除非显式禁用
   return s[taskId] !== false
 }
 
@@ -49,9 +52,6 @@ function setEnabled(taskId, enabled) {
   saveState(s)
 }
 
-/**
- * Yunzai 插件主入口（接收消息事件）
- */
 export default async function (e) {
   if (!e || !e.msg) return
   const msg = e.msg.trim()
@@ -61,7 +61,7 @@ export default async function (e) {
   switch (cmd) {
     case '#qq登录':
     case '#qq刷新ck':
-      return doLogin(e)
+      return doLogin(e, arg)
     case '#qqck':
       return showCookie(e)
     case '#qq签到':
@@ -82,25 +82,73 @@ export default async function (e) {
   }
 }
 
-async function doLogin(e) {
-  try {
-    await e.reply('开始扫码登录，请在 60 秒内扫描二维码...')
-    const { pngBuffer, path } = await fetchQRCode()
-    // 发送图片
-    if (e.group && e.group.sendImage) {
-      await e.group.sendImage(path)
-    } else if (e.friend && e.friend.sendImage) {
-      await e.friend.sendImage(path)
-    } else if (e.reply) {
-      await e.reply([{ type: 'image', data: { file: `file://${path}` } }])
+async function sendImage(e, filePath) {
+  if (e.group && e.group.sendImage) {
+    await e.group.sendImage(filePath)
+  } else if (e.friend && e.friend.sendImage) {
+    await e.friend.sendImage(filePath)
+  } else if (e.bot && e.bot.sendApi) {
+    const groupId = e.group_id
+    const userId = e.user_id
+    const base64 = fs.readFileSync(filePath).toString('base64')
+    if (groupId) await e.bot.sendApi('send_group_msg', { group_id: groupId, message: [{ type: 'image', data: { base64 } }] })
+    else if (userId) await e.bot.sendApi('send_private_msg', { user_id: userId, message: [{ type: 'image', data: { base64 } }] })
+  } else if (e.reply) {
+    try {
+      const base64 = fs.readFileSync(filePath).toString('base64')
+      await e.reply(segment.image(`base64://${base64}`))
+    } catch {
+      await e.reply(`QR 已保存到: ${filePath}`)
     }
-    const { uin, cookie: cookieObj } = await loginFlow({
-      onStatus: (r) => {
-        const map = { '66': '等待扫码', '67': '已扫码待确认', '65': '已扫码' }
-        e.reply(`登录状态: ${map[r.status] || r.status}`)
+  }
+}
+
+async function doLogin(e, arg) {
+  arg = (arg || '').trim()
+  // 显示支持的域
+  if (arg === '列表' || arg === 'list') {
+    const list = Object.keys(LOGIN_DOMAINS).map(d => `  - ${d}  (appid=${LOGIN_DOMAINS[d].appid})`).join('\n')
+    return e.reply(`支持的登录域:\n${list}\n\n默认域: ${DEFAULT_DOMAIN}\n用法: #qq登录 <域>  或  #qq登录 all`)
+  }
+  // 多域登录
+  if (arg === 'all') {
+    await e.reply('开始多域登录，将依次显示二维码，请按顺序扫码...')
+    const r = await loginMultiDomain(Object.keys(LOGIN_DOMAINS), {
+      onDomainStart: async (d) => { await e.reply(`准备登录域: ${d}`) },
+      onQR: async ({ path, domain }) => {
+        await sendImage(e, path)
+        await e.reply(`请扫描此二维码登录 [${domain}]`)
+      },
+      onStatus: async (s) => { /* keep silent */ },
+      onDomainDone: async (d, r) => {
+        await e.reply(`${d} 登录${r.ok ? '成功' : '失败: ' + r.error}`)
+      },
+      onAllDone: async (all) => {
+        const ok = Object.entries(all).filter(([_, r]) => r.ok).map(([d]) => d).join(', ')
+        const fail = Object.entries(all).filter(([_, r]) => !r.ok).map(([d]) => d).join(', ')
+        await e.reply(`多域登录完成\n成功: ${ok || '(无)'}\n失败: ${fail || '(无)'}`)
+      }
+    })
+    return
+  }
+  // 单域登录
+  const domain = arg || DEFAULT_DOMAIN
+  if (!LOGIN_DOMAINS[domain]) {
+    return e.reply(`未知登录域: ${domain}\n支持: ${Object.keys(LOGIN_DOMAINS).join(', ')}\n查看: #qq登录 列表`)
+  }
+  try {
+    await e.reply(`开始扫码登录 [${domain}]，请在 60 秒内扫描二维码...`)
+    const r = await loginDomain(domain, {
+      onQR: async ({ path }) => {
+        await sendImage(e, path)
+      },
+      onStatus: (s) => {
+        const map = { '66': '等待扫码', '67': '已扫码待确认', '65': '已扫码', '68': '二维码已失效', '0': '成功' }
+        e.reply(`状态: ${map[s.status] || s.message || s.status}`)
       },
     })
-    await e.reply(`登录成功，QQ: ${uin}`)
+    cookie.set(r.uin, domain, r.cookies)
+    await e.reply(`登录成功！\nQQ: ${r.uin}\n域: ${r.domain}\np_skey: ${(r.cookies.p_skey || '').slice(0, 8)}...`)
   } catch (err) {
     await e.reply('登录失败: ' + err.message)
   }
@@ -112,8 +160,11 @@ async function showCookie(e) {
   if (uins.length === 0) return e.reply('当前未登录任何账号，请先 #qq登录')
   let text = '当前账号:\n'
   for (const u of uins) {
-    const skey = cookie.extractSkey(cookie.get(u, 'global') || {})
-    text += `- ${u}  skey: ${skey ? skey.slice(0, 6) + '...' : '(无)'}\n`
+    text += `\nQQ: ${u}\n`
+    for (const [d, ck] of Object.entries(all[u])) {
+      const skey = cookie.extractSkey(ck || {})
+      text += `  ${d}: skey=${skey ? skey.slice(0, 8) + '...' : '(无)'}\n`
+    }
   }
   await e.reply(text)
 }
@@ -197,26 +248,26 @@ async function showHelp(e) {
   await e.reply([
     'yunzai_qqlevel 签到插件 帮助',
     '',
-    '#qq登录           - 扫码登录获取 cookie',
-    '#qq刷新ck         - 同上',
-    '#qqck             - 查看当前 cookie',
-    '#qq签到           - 立即执行所有任务',
-    '#qq任务列表       - 列出所有任务',
-    '#qq任务详情 <id>  - 查看任务详情',
-    '#qq启用任务 <id>  - 启用指定任务',
-    '#qq禁用任务 <id>  - 禁用指定任务',
-    '#qq签到帮助       - 本帮助',
+    '#qq登录 [domain]   - 扫码登录指定域',
+    '#qq登录 all        - 多域连续扫码登录',
+    '#qq登录 列表       - 查看支持的登录域',
+    '#qq刷新ck [domain] - 同 #qq登录',
+    '#qqck              - 查看当前 cookie',
+    '#qq签到            - 立即执行所有任务',
+    '#qq任务列表        - 列出所有任务',
+    '#qq任务详情 <id>   - 查看任务详情',
+    '#qq启用任务 <id>   - 启用指定任务',
+    '#qq禁用任务 <id>   - 禁用指定任务',
+    '#qq签到帮助        - 本帮助',
+    '',
+    `支持的域: ${Object.keys(LOGIN_DOMAINS).join(', ')}`,
   ].join('\n'))
 }
 
-/**
- * Yunzai bot 启动钩子
- */
 export async function onFirstLaunch() {
   console.log('[yunzai_qqlevel] 启动，初始化数据目录...')
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
 
-  // 注册 cron 任务
   const ctx = { uin: Object.keys(cookie.readAll())[0] || '', bot: global.Bot, logger: console }
   try {
     scheduleAll(ctx)
