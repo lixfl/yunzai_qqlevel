@@ -2412,3 +2412,1322 @@ taskGroups:
           sucMsg:
           errMsg:
           replaces: []
+  - id: 大会员任务
+    type: web
+    preTasks:
+      - id: 大会员官网签到
+        desc: 大会员官网签到
+        cron:
+        relay:
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: https://vip.qzone.qq.com/fcg-bin/v2/fcg_vip_task_checkin?t=${random}$&g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: appid=qq_big_vip&op=CheckIn&uin=${uin}$&format=json&inCharset=utf-8&outCharset=utf-8
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.code
+              key: ret
+              value: $this
+            - from: data
+              match: $.message
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: $msg
+          errMsg: $msg
+          replaces: []
+      - id: 上报完成个性赞点赞
+        desc: 上报完成个性赞点赞
+        cron:
+        relay:
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: https://h5.qzone.qq.com/webapp/json/QQBigVipTask/CompleteTask?t=${random}$&g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: outCharset=utf-8&iAppId=0&llTime=${second}$&format=json&iActionType=6&uin=${uin}$&inCharset=utf-8
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.ret
+              key: ret
+              value: $this
+            - from: data
+              match: $.msg
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: $msg
+          errMsg: $msg
+          replaces: []
+      - id: 登陆我的访客
+        desc: 登陆我的访客
+        cron:
+        relay:
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: https://h5.qzone.qq.com/qzone/visitor?_wv=3&_wwv=1024&_proxy=1
+        reqMethod: get
+        reqHeaders: {}
+        reqData:
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts: []
+          # 默认用httpcode == 200判断
+          assert:
+          sucMsg: 访问访客成功
+          errMsg: 访问访客失败
+          replaces: []
+      - id: 上报完成登陆我的访客
+        desc: 上报完成登陆我的访客
+        cron:
+        relay:
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: https://h5.qzone.qq.com/webapp/json/vip_reminder/CMD_GET_REMINDER?t=${random}$&g_tk=${ps_tk}$
+        reqMethod: get
+        reqHeaders:
+          referer: https://h5.qzone.qq.com/qzone/visitor?_wv=3&_wwv=1024&_proxy=1&iZoneId=9&uin=${uin}$&format=json&inCharset=utf-8&outCharset=utf-8
+        reqData:
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.ret
+              key: ret
+              value: $this
+            - from: data
+              match: $.msg
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: $msg
+          errMsg: $msg
+          replaces: []
+      - id: 分享官网
+        desc: 分享官网
+        cron:
+        relay:
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"ActReqData":"{\"receivers\":[\"$shared_friend\"]}","SubActId":"102872_eee28ac2"}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.Msg
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 分享成功
+          errMsg: $msg
+          replaces: []
+      - id: 师徒打卡
+        desc: 师徒打卡
+        cron:
+        relay:
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"ActReqData":"{}","SubActId":"102921_9d92dbdd"}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.Msg
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 打卡成功
+          errMsg: $msg
+          replaces: []
+    tasks:
+      - id: 每周QQ等级加速卡
+        desc: QQ等级加速0.8倍，持续1天，每周一执行一次
+        cron: 0 0 0 ? * 1
+        relay:
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"ActReqData":"{}","SubActId":"10866_f00c7ee9"}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.Msg
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 每周QQ等级加速包1天
+        desc: （参与条件未知），每周一执行一次
+        cron: 0 0 0 ? * 1
+        relay:
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: https://h5.qzone.qq.com/proxy/domain/trpc.qzone.qq.com/trpc/subact/ExecAct?Id=937_54541460&g_tk=${ps_tk}$
+        reqMethod: get
+        reqHeaders:
+          referer: $req_url
+        reqData:
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.Msg
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 每周SVIP等级加速卡
+        desc: svip等级极速成长，持续2天，每周一执行一次
+        cron: 0 0 0 ? * 1
+        relay:
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"ActReqData":"{}","SubActId":"10871_287fb7d2"}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.Msg
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 每周SVIP等级加倍卡1天
+        desc: （参与条件未知），每周一执行一次
+        cron: 0 0 0 ? * 1
+        relay:
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: https://h5.qzone.qq.com/proxy/domain/trpc.qzone.qq.com/trpc/subact/ExecAct?Id=940_140205de&g_tk=${ps_tk}$
+        reqMethod: get
+        reqHeaders:
+          referer: $req_url
+        reqData:
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.Msg
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 每周SVIP加倍卡
+        desc: 1天SVIP加倍卡，每周一执行一次
+        cron: 0 0 0 ? * 1
+        relay:
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"ActReqData":"{}","SubActId":"940_140205de"}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.Msg
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 每周QQ等级加速包
+        desc: 1天QQ等级加速包，每周一执行一次
+        cron: 0 0 0 ? * 1
+        relay:
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"ActReqData":"{}","SubActId":"937_54541460"}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.Msg
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 大会员官网签到（完成任务）
+        desc: 大会员官网签到并且完成任务，5点大会员成长值
+        cron: 0 0 0 * * *
+        relay: 大会员官网签到
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: https://h5.qzone.qq.com/v2/vip/dhy/trpc/taskcenter/ExpressPrize/Express?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"appID":"qq_big_vip","taskID":"task_login_in_qq_big_vip_website","clientPlat":1}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.data.code
+              key: ret
+              value: $this
+            - from: data
+              match: $.data.msg
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: $msg
+          errMsg: $msg
+          replaces: []
+      - id: 大会员个性点赞（仅完成）
+        desc: 21点自动提交任务，需手动配置空间个性赞，并且在21点前手动点赞（该任务无法自动完成）
+        cron: 0 0 21 * * *
+        relay:
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: https://h5.qzone.qq.com/v2/vip/dhy/trpc/taskcenter/ExpressPrize/Express?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"appID":"qq_big_vip","taskID":"task_use_qq_big_vip_qzone_praise","clientPlat":1}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.data.code
+              key: ret
+              value: $this
+            - from: data
+              match: $.data.message
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: $msg
+          errMsg: $msg
+          replaces: []
+      - id: 登陆我的访客（完成任务）
+        desc: 登陆我的访客并且完成任务，5点大会员成长值
+        cron: 0 0 0 * * *
+        relay: 登陆我的访客|上报完成登陆我的访客
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: https://h5.qzone.qq.com/v2/vip/dhy/trpc/taskcenter/ExpressPrize/Express?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"appID":"qq_big_vip","taskID":"task_browse_act_to_1_visitor","clientPlat":1}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.data.code
+              key: ret
+              value: $this
+            - from: data
+              match: $.data.message
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: $msg
+          errMsg: $msg
+          replaces: []
+      - id: 分享官网（完成任务）
+        desc: 分享官网并且完成任务，5点大会员成长值
+        cron: 0 0 0 * * *
+        relay: 分享官网
+        rear:
+        envs:
+          - name: shared_friend
+            type: friend
+            limit: 1
+            default: '$uin'
+            desc: 选择分享的好友，点击此卡片可打开好友列表
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: https://h5.qzone.qq.com/v2/vip/dhy/trpc/taskcenter/ExpressPrize/Express?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"appID":"qq_big_vip","taskID":"task_share_qq_big_vip_website","clientPlat":1}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.data.code
+              key: ret
+              value: $this
+            - from: data
+              match: $.data.message
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: $msg
+          errMsg: $msg
+          replaces: []
+      - id: 师徒打卡（完成任务）
+        desc: 师徒打卡并且完成任务，5点大会员成长值
+        cron: 0 0 0 * * *
+        relay: 师徒打卡
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: https://h5.qzone.qq.com/v2/vip/dhy/trpc/taskcenter/ExpressPrize/Express?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"appID":"qq_big_vip","taskID":"task_qq_big_vip_relationship_sign_in","clientPlat":1}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.data.code
+              key: ret
+              value: $this
+            - from: data
+              match: $.data.message
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: $msg
+          errMsg: $msg
+          replaces: []
+  - id: 超星会员
+    type: web
+    preTasks:
+      - id: 解析超星会员活动js地址
+        desc: 解析超星会员活动js地址
+        cron:
+        relay:
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: https://club.vip.qq.com/qqvip/svip-star/privilege?_wv=16777221&_proxy=1&from=kuikly-vip-index
+        reqMethod: get
+        reqHeaders:
+          referer: $req_url
+        reqData:
+        domain: vip.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: <script\s+src=\"\/\/([^"]+app\.\w+\.js)\"
+              key: appjs
+              value: https://$this
+          assert:
+          sucMsg: 获取成功，appjs地址：$appjs
+          errMsg: 未知错误
+          replaces: []
+      - id: 提取领取权益包活动参数
+        desc: 提取领取权益包活动参数
+        cron:
+        relay: 解析超星会员活动js地址
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: $appjs
+        reqMethod: get
+        reqHeaders:
+          referer: https://club.vip.qq.com/
+        reqData:
+        domain:
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: getGrowthRule:\s?\"(\w+)\"
+              key: growthRuleParam
+              value: '[{"SubActId":"$this","ClientPlat":1,"ExtInfo":["ExtKeyCheckRule"]}]'
+          assert:
+          sucMsg: 获取成功，加倍活动成长权益参数：$growthRuleParam
+          errMsg: 未知错误
+          replaces: []
+    tasks:
+      - id: STAR 专享每月权益
+        desc: 等级加速包1个月、成长加速包1个月、成长加倍卡30天，每月5号执行一次(避免服务端原因导致领取失败)
+        cron: 0 0 0 5 * ?
+        relay: 提取领取权益包活动参数
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 2
+        reqUrl: https://club.vip.qq.com/qqvip/api/tianxuan/access/execAct?g_tk=${ps_tk}$&isomorphism-args=${encBase64($growthRuleParam)}$
+        reqMethod: get
+        reqHeaders:
+          referer: $req_url
+        reqData:
+        domain: vip.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.data.code
+              key: ret
+              value: $this
+            - from: data
+              match: $.data.msg
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 每月成长礼包领取成功
+          errMsg: $msg
+          replaces: []
+  - id: QQ会员
+    type: web
+    preTasks: []
+    tasks:
+      - id: QQ会员公众号签到
+        desc: 每日1点成长值（超会2点）
+        cron: 0 0 0 * * *
+        relay:
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 2
+        reqUrl: https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"ActReqData":"{}","SubActId":"69778_4345371d"}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.Msg
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 成长值领取成功
+          errMsg: $msg
+          replaces: []
+  - id: QQ超级会员
+    type: web
+    preTasks:
+      - id: 获取SVIP等级
+        desc: 获取SVIP等级
+        cron: basic
+        relay:
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 0
+        reqUrl: https://club.vip.qq.com/api/vip/getQQLevelInfo?g_tk=${ps_tk}$&requestBody=${urlEncode({"sSessionKey":"$skey","iUin":$uin})}$
+        reqMethod: get
+        reqHeaders:
+        reqData:
+        domain: vip.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.data.mRes.iVipLevel
+              key: vip_level
+              value: $this
+          assert:
+          sucMsg: 获取SVIP等级成功，当前SVIP等级：$vip_level
+          errMsg: 获取SVIP等级失败
+          replaces: []
+    tasks:
+#      - id: 成长排行榜每日签到
+#        desc: 每日3点成长值
+#        cron: 0 0 0 * * *
+#        relay:
+#        rear:
+#        envs:
+#        conditions:
+#        repeat: 1
+#        delay: 2
+#        reqUrl: https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${ps_tk}$
+#        reqMethod: post
+#        reqHeaders:
+#          referer: $req_url
+#        reqData: '{"ActReqData":"{}","SubActId":"91848_72e687bf"}'
+#        domain: qzone.qq.com
+#        callback:
+#          dataRegex:
+#          extracts:
+#            - from: data
+#              match: $.Code
+#              key: ret
+#              value: $this
+#            - from: data
+#              match: $.Msg
+#              key: msg
+#              value: $this
+#          assert:
+#            key: $ret
+#            value: 0
+#          sucMsg: 成长值领取成功
+#          errMsg: $msg
+#          replaces: []
+#      - id: svip储值
+#        desc: 每35天可收取一次，每周一尝试收取一次
+#        cron: 0 0 0 ? * 1
+#        relay:
+#        rear:
+#        envs:
+#        conditions:
+#        repeat: 1
+#        delay: 2
+#        reqUrl: https://cgi.vip.qq.com/svipgrowth/withdrawGrowth?g_tk=${csrf_token}$&ps_tk=${ps_tk}$&callback=jsonp2
+#        reqMethod: get
+#        reqHeaders:
+#          referer: $req_url
+#        reqData:
+#        domain: vip.qq.com
+#        callback:
+#          dataRegex: \((.*)\);
+#          extracts:
+#            - from: data
+#              match: $.ret
+#              key: ret
+#              value: $this
+#          assert:
+#            key: $ret
+#            value: 0
+#          sucMsg: 收取成功
+#          errMsg: 还未到收取时间哦
+#          replaces: []
+      - id: 连续包月加速包
+        desc: 每月可领取一次，每月1号触发执行
+        cron: 0 0 0 1 * ?
+        relay:
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 2
+        reqUrl: https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"ActReqData":"{}","SubActId":"64536_81ee0951"}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.Msg
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 1个月成长加速包领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 超级会员每日累计任务（SVIP1-2）
+        desc: 完成任意超会任务超过15天即可领取，每月24号触发执行一次
+        cron: 0 0 0 24 * ?
+        relay:
+        rear:
+        envs:
+        conditions:
+          - var1: $vip_level
+            operator: '>='
+            var2: 1
+          - var1: $vip_level
+            operator: '<='
+            var2: 2
+        repeat: 1
+        delay: 2
+        reqUrl: https://club.vip.qq.com/api/tianxuan/execAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: 'subActId=61794_c6a73ea2&actReqData='
+        domain: vip.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.code
+              key: ret
+              value: $this
+            - from: data
+              match: $.msg
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 30点成长值领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 超级会员每日累计任务（SVIP3-5）
+        desc: 完成任意超会任务超过15天即可领取，每月24号触发执行一次
+        cron: 0 0 0 24 * ?
+        relay:
+        rear:
+        envs:
+        conditions:
+          - var1: $vip_level
+            operator: '>='
+            var2: 3
+          - var1: $vip_level
+            operator: '<='
+            var2: 5
+        repeat: 1
+        delay: 2
+        reqUrl: https://club.vip.qq.com/api/tianxuan/execAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: 'subActId=61795_1c91f4a7&actReqData='
+        domain: vip.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.code
+              key: ret
+              value: $this
+            - from: data
+              match: $.msg
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 50点成长值领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 超级会员每日累计任务（SVIP6-7）
+        desc: 完成任意超会任务超过15天即可领取，每月24号触发执行一次
+        cron: 0 0 0 24 * ?
+        relay:
+        rear:
+        envs:
+        conditions:
+          - var1: $vip_level
+            operator: '>='
+            var2: 6
+          - var1: $vip_level
+            operator: '<='
+            var2: 7
+        repeat: 1
+        delay: 2
+        reqUrl: https://club.vip.qq.com/api/tianxuan/execAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: 'subActId=61796_5287e989&actReqData='
+        domain: vip.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.code
+              key: ret
+              value: $this
+            - from: data
+              match: $.msg
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 80点成长值领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 超级会员每日累计任务（SVIP8+）
+        desc: 完成任意超会任务超过15天即可领取，每月24号触发执行一次
+        cron: 0 0 0 24 * ?
+        relay:
+        rear:
+        envs:
+        conditions:
+          - var1: $vip_level
+            operator: '>='
+            var2: 8
+        repeat: 1
+        delay: 2
+        reqUrl: https://club.vip.qq.com/api/tianxuan/execAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: 'subActId=61799_e641bcc0&actReqData='
+        domain: vip.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.code
+              key: ret
+              value: $this
+            - from: data
+              match: $.msg
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 120点成长值领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 超级会员每日积分
+        desc: 连续签到7天可得大量积分
+        cron: 0 0 0 * * *
+        relay:
+        rear:
+        envs:
+        conditions:
+        repeat: 1
+        delay: 2
+        reqUrl: https://club.vip.qq.com/qqvip/api/vip-score/ExecAct?g_tk=${ps_tk}$&isomorphism-args=WyI2MzQ2MF8wZWY3YTgxNSJd
+        reqMethod: get
+        reqHeaders:
+          referer: $req_url
+        reqData:
+        domain: vip.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.data.code
+              key: ret
+              value: $this
+            - from: data
+              match: $.data.msg
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 每日积分领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 超级会员每月积分（SVIP1）
+        desc: SVIP1每月可领取10积分，每月1号执行，该类任务目前可叠加（高等级可以领取低等级全部奖励）
+        cron: 0 0 0 1 * ?
+        relay:
+        rear:
+        envs:
+        conditions:
+          - var1: $vip_level
+            operator: '>='
+            var2: 1
+        repeat: 1
+        delay: 2
+        reqUrl: https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: https://act.qzone.qq.com/v2/vip/tx/p/43288_c7c548e4
+        reqData: '{"g_tk":${ps_tk}$,"ActReqData":"{}","SubActId":"72596_c72fd289"}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.message
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 超级会员每月积分（SVIP2）
+        desc: SVIP2每月可领取15积分，每月1号执行，该类任务目前可叠加（高等级可以领取低等级全部奖励）
+        cron: 0 0 0 1 * ?
+        relay:
+        rear:
+        envs:
+        conditions:
+          - var1: $vip_level
+            operator: '>='
+            var2: 2
+        repeat: 1
+        delay: 2
+        reqUrl: https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"g_tk":${ps_tk}$,"ActReqData":"{}","SubActId":"72597_de7d1565"}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.message
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 超级会员每月积分（SVIP3）
+        desc: SVIP3每月可领取20积分，每月1号执行，该类任务目前可叠加（高等级可以领取低等级全部奖励）
+        cron: 0 0 0 1 * ?
+        relay:
+        rear:
+        envs:
+        conditions:
+          - var1: $vip_level
+            operator: '>='
+            var2: 3
+        repeat: 1
+        delay: 2
+        reqUrl: https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"g_tk":${ps_tk}$,"ActReqData":"{}","SubActId":"72598_b6da2298"}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.message
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 超级会员每月积分（SVIP4）
+        desc: SVIP4每月可领取25积分，每月1号执行，该类任务目前可叠加（高等级可以领取低等级全部奖励）
+        cron: 0 0 0 1 * ?
+        relay:
+        rear:
+        envs:
+        conditions:
+          - var1: $vip_level
+            operator: '>='
+            var2: 4
+        repeat: 1
+        delay: 2
+        reqUrl: https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"g_tk":${ps_tk}$,"ActReqData":"{}","SubActId":"72599_2eac5a26"}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.message
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 超级会员每月积分（SVIP5）
+        desc: SVIP5每月可领取30积分，每月1号执行，该类任务目前可叠加（高等级可以领取低等级全部奖励）
+        cron: 0 0 0 1 * ?
+        relay:
+        rear:
+        envs:
+        conditions:
+          - var1: $vip_level
+            operator: '>='
+            var2: 5
+        repeat: 1
+        delay: 2
+        reqUrl: https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"g_tk":${ps_tk}$,"ActReqData":"{}","SubActId":"72600_07e9df8b"}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.message
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 超级会员每月积分（SVIP6）
+        desc: SVIP6每月可领取35积分，每月1号执行，该类任务目前可叠加（高等级可以领取低等级全部奖励）
+        cron: 0 0 0 1 * ?
+        relay:
+        rear:
+        envs:
+        conditions:
+          - var1: $vip_level
+            operator: '>='
+            var2: 6
+        repeat: 1
+        delay: 2
+        reqUrl: https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"g_tk":${ps_tk}$,"ActReqData":"{}","SubActId":"72601_6413fa8f"}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.message
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 超级会员每月积分（SVIP7）
+        desc: SVIP7每月可领取40积分，每月1号执行，该类任务目前可叠加（高等级可以领取低等级全部奖励）
+        cron: 0 0 0 1 * ?
+        relay:
+        rear:
+        envs:
+        conditions:
+          - var1: $vip_level
+            operator: '>='
+            var2: 7
+        repeat: 1
+        delay: 2
+        reqUrl: https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"g_tk":${ps_tk}$,"ActReqData":"{}","SubActId":"72602_56d099dd"}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.message
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 超级会员每月积分（SVIP8）
+        desc: SVIP8每月可领取45积分，每月1号执行，该类任务目前可叠加（高等级可以领取低等级全部奖励）
+        cron: 0 0 0 1 * ?
+        relay:
+        rear:
+        envs:
+        conditions:
+          - var1: $vip_level
+            operator: '>='
+            var2: 8
+        repeat: 1
+        delay: 2
+        reqUrl: https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"g_tk":${ps_tk}$,"ActReqData":"{}","SubActId":"72603_a5b11fa6"}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.message
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 超级会员每月积分（SVIP9）
+        desc: SVIP9每月可领取50积分，每月1号执行，该类任务目前可叠加（高等级可以领取低等级全部奖励）
+        cron: 0 0 0 1 * ?
+        relay:
+        rear:
+        envs:
+        conditions:
+          - var1: $vip_level
+            operator: '>='
+            var2: 9
+        repeat: 1
+        delay: 2
+        reqUrl: https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"g_tk":${ps_tk}$,"ActReqData":"{}","SubActId":"72604_c4d6e5ae"}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.message
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 领取成功
+          errMsg: $msg
+          replaces: []
+      - id: 超级会员每月积分（SVIP10）
+        desc: SVIP10每月可领取55积分，每月1号执行，该类任务目前可叠加（高等级可以领取低等级全部奖励）
+        cron: 0 0 0 1 * ?
+        relay:
+        rear:
+        envs:
+        conditions:
+          - var1: $vip_level
+            operator: '>='
+            var2: 10
+        repeat: 1
+        delay: 2
+        reqUrl: https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${ps_tk}$
+        reqMethod: post
+        reqHeaders:
+          referer: $req_url
+        reqData: '{"g_tk":${ps_tk}$,"ActReqData":"{}","SubActId":"72605_27b0ab37"}'
+        domain: qzone.qq.com
+        callback:
+          dataRegex:
+          extracts:
+            - from: data
+              match: $.Code
+              key: ret
+              value: $this
+            - from: data
+              match: $.message
+              key: msg
+              value: $this
+          assert:
+            key: $ret
+            value: 0
+          sucMsg: 领取成功
+          errMsg: $msg
+          replaces: []
