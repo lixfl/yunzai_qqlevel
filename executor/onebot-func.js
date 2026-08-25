@@ -302,14 +302,115 @@ register('QZIntimateSpaceManager/doCheckInRequest', async () => {
 })
 
 /**
- * 好友名片点赞
+ * 好友名片点赞 — 通过 bot.pickFriend(uin).thumbUp(n)
+ *
+ * 参考: https://github.com/xiaotian2333/yunzai-plugins-Single-file/blob/main/%E7%82%B9%E8%B5%9E%E7%BB%AD%E7%81%AB.js
+ *   Bot.pickFriend(qq).thumbUp(thumbsUpMe_sum)
+ *
+ * 重要：QQ 普通用户每天能给**不同好友**各点赞 10 次，给**同一好友**点赞上限:
+ *   - VIP: 20 次
+ *   - 普通: 10 次
+ *   （来自参考插件注释）
+ *
+ * reqUrl: xa://FavoriteManager/favorite?uin=${friends}$&count=${count}$
+ * env: friends = 好友列表 (逗号或数组)
  */
-register('FavoriteManager/favoriteAllVoter', async () => {
-  return { ok: false, msg: '好友名片点赞需要 OIDB 协议，外部 bot 暂不支持' }
+register('FavoriteManager/favorite', async (task, env, ctx, query) => {
+  const bot = pickBot(ctx)
+  if (!bot) return { ok: false, msg: 'no bot available' }
+
+  const friendsRaw = query.uin || env.uin || env.friends || []
+  const friends = (Array.isArray(friendsRaw) ? friendsRaw : String(friendsRaw).split(','))
+    .map(s => String(s).trim()).filter(Boolean)
+  const count = parseInt(query.count || env.count || '10', 10)
+
+  if (friends.length === 0) {
+    return { ok: false, msg: '未指定点赞好友列表 (env.friends)' }
+  }
+  if (typeof bot.pickFriend !== 'function') {
+    return { ok: false, msg: 'bot 不支持 pickFriend (需要 Yunzai/icqq)' }
+  }
+
+  const results = []
+  for (const fid of friends) {
+    try {
+      const friend = bot.pickFriend(Number(fid) || fid)
+      if (!friend || typeof friend.thumbUp !== 'function') {
+        results.push({ friend: fid, ok: false, msg: 'friend 实例无 thumbUp' })
+        continue
+      }
+      const r = await friend.thumbUp(count)
+      results.push({ friend: fid, ok: true, count, data: r })
+    } catch (e) {
+      results.push({ friend: fid, ok: false, msg: e.message })
+    }
+    if (task.delay) await sleep((task.delay || 10) * 1000)
+  }
+  const okCount = results.filter(r => r.ok).length
+  return { ok: okCount > 0, data: results, summary: `${okCount}/${results.length} 好友点赞成功` }
 })
 
-register('FavoriteManager/favorite', async () => {
-  return { ok: false, msg: '好友名片点赞需要 OIDB 协议，外部 bot 暂不支持' }
+/**
+ * 资料卡回赞 — 给好友列表中**最近互动**的人回赞
+ *
+ * XAutoDaily 实际功能: 遍历自己被点赞/留言/最近访问记录，回赞过去 7 天里访问过的人。
+ * 简化实现: 给指定 friends 列表回赞 + 发消息。
+ *
+ * reqUrl: xa://FavoriteManager/favoriteAllVoter?maxPage=${maxPage}$&maxDays=${maxDays}$&message=${message}$
+ */
+register('FavoriteManager/favoriteAllVoter', async (task, env, ctx, query) => {
+  const bot = pickBot(ctx)
+  if (!bot) return { ok: false, msg: 'no bot available' }
+
+  const message = query.message || env.message || '回赞~'
+  const count = parseInt(query.count || env.count || '10', 10)
+
+  // env.friends 是用户配置的"回赞目标"列表 (来自 XAutoDaily 配置)
+  const friendsRaw = query.uin || env.uin || env.friends || []
+  let friends = (Array.isArray(friendsRaw) ? friendsRaw : String(friendsRaw).split(','))
+    .map(s => String(s).trim()).filter(Boolean)
+
+  if (friends.length === 0) {
+    return { ok: false, msg: '未指定回赞好友列表' }
+  }
+  if (typeof bot.pickFriend !== 'function') {
+    return { ok: false, msg: 'bot 不支持 pickFriend' }
+  }
+
+  const results = []
+  for (const fid of friends) {
+    try {
+      const friend = bot.pickFriend(Number(fid) || fid)
+      if (!friend) { results.push({ friend: fid, ok: false, msg: 'pickFriend 失败' }); continue }
+
+      // 点赞
+      let liked = false
+      if (typeof friend.thumbUp === 'function') {
+        try {
+          await friend.thumbUp(count)
+          liked = true
+        } catch (e) {
+          results.push({ friend: fid, thumbUpErr: e.message })
+        }
+      }
+
+      // 发回赞消息
+      let sent = false
+      try {
+        await friend.sendMsg(message)
+        sent = true
+      } catch (e) {
+        results.push({ friend: fid, sendErr: e.message })
+      }
+
+      results.push({ friend: fid, ok: liked || sent, liked, sent })
+    } catch (e) {
+      results.push({ friend: fid, ok: false, msg: e.message })
+    }
+    if (task.delay) await sleep((task.delay || 10) * 1000)
+  }
+  const okCount = results.filter(r => r.ok).length
+  return { ok: okCount > 0, data: results, summary: `${okCount}/${results.length} 回赞成功` }
 })
 
 /**
