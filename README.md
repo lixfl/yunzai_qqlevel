@@ -48,8 +48,6 @@ cd plugins/yunzai_qqlevel
 pnpm install   # 或 npm install
 ```
 
-**目录要求**：必须放在 `plugins/yunzai_qqlevel/` 目录下（与 `package.json` 同级）。
-
 ---
 
 ## 🔧 使用步骤
