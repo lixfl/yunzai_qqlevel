@@ -185,10 +185,22 @@ export class QqLevelPlugin extends plugin {
       }
       const summary = []
       for (const g of groups) {
+        // 注入 currentGroup 让 relay/rear 能找到 preTasks
+        const gCtx = { ...ctx, currentGroup: g }
+        // 1. 先执行 preTasks (它们是 relay 引用的源)
+        for (const pre of (g.preTasks || [])) {
+          if (!Data.getTaskEnabled(pre.id)) continue
+          try {
+            await runTask(pre, gCtx)
+          } catch (err) {
+            logger.warn?.('[yunzai_qqlevel] preTask', pre.id, 'failed:', err.message)
+          }
+        }
+        // 2. 执行主 tasks
         for (const t of (g.tasks || [])) {
           if (!Data.getTaskEnabled(t.id)) continue
           try {
-            const r = await runTask(t, ctx)
+            const r = await runTask(t, gCtx)
             summary.push(`${t.id}: ${r.ok ? '✓' : '✗ ' + (r.msg || '')}`)
           } catch (err) {
             summary.push(`${t.id}: ✗ ${err.message}`)

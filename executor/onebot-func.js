@@ -198,11 +198,28 @@ register('SendMessageManager/sendMessage/group', async (task, env, ctx, query) =
   const results = []
   for (const gid of groups) {
     try {
+      // gid 兼容性: Yunzai 用字符串, icqq 用数字; 先尝试字符串,失败再试数字
+      const idStr = String(gid)
+      const idNum = parseInt(idStr, 10) || idStr
+      let ok = false
       if (typeof bot.pickGroup === 'function') {
-        await bot.pickGroup(Number(gid) || gid).sendMsg(finalMsg)
+        try {
+          await bot.pickGroup(idStr).sendMsg(finalMsg)
+          ok = true
+        } catch {
+          await bot.pickGroup(idNum).sendMsg(finalMsg)
+          ok = true
+        }
       } else if (typeof bot.sendGroupMsg === 'function') {
-        await bot.sendGroupMsg(Number(gid) || gid, finalMsg)
-      } else {
+        try {
+          await bot.sendGroupMsg(idStr, finalMsg)
+          ok = true
+        } catch {
+          await bot.sendGroupMsg(idNum, finalMsg)
+          ok = true
+        }
+      }
+      if (!ok) {
         results.push({ group: gid, ok: false, msg: 'bot 不支持发群消息' })
         continue
       }
@@ -431,9 +448,15 @@ register('FavoriteManager/favorite', async (task, env, ctx, query) => {
   const results = []
   for (const fid of friends) {
     try {
-      const friend = bot.pickFriend(Number(fid) || fid)
+      // 兼容性: Yunzai 用字符串, icqq 用数字; 两种都试
+      const idStr = String(fid)
+      const idNum = parseInt(idStr, 10) || idStr
+      let friend = bot.pickFriend(idNum) || bot.pickFriend(idStr)
+      if (!friend && typeof bot.pickUser === 'function') {
+        friend = bot.pickUser(idNum) || bot.pickUser(idStr)
+      }
       if (!friend || typeof friend.thumbUp !== 'function') {
-        results.push({ friend: fid, ok: false, msg: 'friend 实例无 thumbUp' })
+        results.push({ friend: fid, ok: false, msg: 'friend 实例无 thumbUp (需要 Yunzai/icqq)' })
         continue
       }
       const r = await friend.thumbUp(count)

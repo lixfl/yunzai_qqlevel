@@ -55,12 +55,35 @@ function mergeCookies(a, b) {
 }
 
 /**
- * 解析 ${u1, u2, u3}$ 形式的多值 (按 , 分割)
+ * 检查 task.conditions (XAutoDaily 格式)
+ * @param {Array} conditions
+ * @param {object} env
+ * @returns {boolean} true 表示满足所有条件
  */
-function parseListVar(value) {
-  if (value == null || value === '') return []
-  if (Array.isArray(value)) return value
-  return String(value).split(',').map(s => s.trim()).filter(Boolean)
+function checkConditions(conditions, env) {
+  if (!conditions || conditions.length === 0) return true
+  for (const c of conditions) {
+    const var1 = format(String(c.var1 || ''), env)
+    const var2 = format(String(c.var2 || ''), env)
+    const op = String(c.operator || '==').trim()
+    // 转数字比较 (如果是数字字符串)
+    const isNum1 = /^-?\d+(?:\.\d+)?$/.test(var1)
+    const isNum2 = /^-?\d+(?:\.\d+)?$/.test(var2)
+    let v1 = isNum1 ? Number(var1) : var1
+    let v2 = isNum2 ? Number(var2) : var2
+    let pass = false
+    switch (op) {
+      case '==': case '=': pass = v1 == v2; break
+      case '!=': case '<>': pass = v1 != v2; break
+      case '>': pass = v1 > v2; break
+      case '>=': pass = v1 >= v2; break
+      case '<': pass = v1 < v2; break
+      case '<=': pass = v1 <= v2; break
+      default: pass = true
+    }
+    if (!pass) return false
+  }
+  return true
 }
 
 /**
@@ -152,6 +175,9 @@ export async function runTask(task, ctx = {}) {
     timeSecond: Math.floor(Date.now() / 1000),
     // ti.qq.com 接口需要的 qua 字段 (QQ 标准 UA)
     qua: 'V1_IPH_SQ_9.1.0_0_TIM_YYB_9.1.0_8_a52b32d3',
+    // 部分 task 的 req_headers 引用 (用户手动配置类,如 $req_url)
+    req_url: 'https://user.qzone.qq.com/',
+    vip_level: 0,  // 默认 0 (普通用户); 大会员任务用 conditions 判断
   }
   for (const e of (task.envs || [])) {
     if (baseEnv[e.name] == null) baseEnv[e.name] = e.default
@@ -159,6 +185,11 @@ export async function runTask(task, ctx = {}) {
   const env = parseEnvValue(baseEnv)
 
   const type = task.type || 'web'
+
+  // 0. 检查 conditions (XAutoDaily 条件, 不满足则跳过整个 task, 包括 relay)
+  if (!checkConditions(task.conditions, env)) {
+    return { ok: true, skipped: true, msg: '条件不满足,已跳过' }
+  }
 
   try {
     // 1. 执行 relay 链 (前置任务)
