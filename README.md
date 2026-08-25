@@ -10,8 +10,8 @@
 
 ### 任务规模
 
-- **16 个任务组**，**57 个任务**（与 XAutoDaily v66 完全一致）
-- **45 个 web 任务**（HTTP） + **6 个 func 任务**（OneBot） + **6 个 mini 任务**
+- **13 个任务组**，**51 个任务**
+- **45 个 web 任务**（HTTP） + **6 个 func 任务**（OneBot）
 - **多域 QR 登录**（qzone/qun/vip/mail/weiyun/accounts）
 - **群白名单/黑名单** + **群打卡/续火/抽字符**
 - **cron 自动调度** + **配置热重载**
@@ -33,9 +33,6 @@
 # 配置
 #qq配置 / #qq重载配置
 
-# 小程序
-#qq小程序状态 / #qq禁用小程序
-
 # 帮助
 #qq签到帮助
 ```
@@ -46,31 +43,13 @@
 |------|------|------|
 | HTTP 任务 | 45 | ✅ 真正可用 |
 | OneBot 模拟任务 | 6 | ✅ 真正可用（用 icqq Yunzai API） |
-| 小程序任务 | 6 | ⚠️ 仅 HTTP 部分 |
 
-### 小程序 (mini) 任务 — 6 个
-
-| 任务 | 域 | 业务结果 |
-|------|----|----------|
-| 情侣空间打卡 | qqmp.welove520.com | 需小程序 access_token |
-| 300英雄营地签到 | m300wxapp.jumpw.com | 需登录态 |
-| 王者营地点赞 | ssl.kohsocialapp.qq.com | 需登录态 |
-| 王者营地浏览 | ssl.kohsocialapp.qq.com | 需登录态 |
-| 王者营地签到 | kohcamp.qq.com | 需登录态 |
-| 王者营地分享 | ssl.kohsocialapp.qq.com | 需登录态 |
-
-**HTTP 接口可达（返回 200），但业务失败**：所有 mini 任务都需要**小程序登录态**（access_token / openid），外部 Yunzai bot 无法获取 XAutoDaily 在 QQ 客户端内部能拿到的登录态。
-
-**解决方案**：
-- 批量禁用：`#qq禁用小程序`
-- 查看状态：`#qq小程序状态`
-- 单独启用：`#qq启用任务 <id>`（用户自己从浏览器抓小程序 cookie）
-
-### 其他无法实现（需要 Xposed Hook）
+### 无法实现（需要 Xposed Hook）
 
 | 功能 | 说明 |
 |------|------|
 | QZone 亲密空间签到 | 需要 ViewModel 调用 |
+| ~~小程序任务~~ | ~~已删除：需要小程序登录态，外部 bot 无法获取~~ |
 
 ---
 

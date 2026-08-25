@@ -1,7 +1,7 @@
 {
   "name": "yunzai_qqlevel",
-  "version": "2.0.0",
-  "description": "Yunzai-Bot QQ 等级 / 签到插件 — 移植 XAutoDaily 全部功能到 Yunzai 平台",
+  "version": "2.1.0",
+  "description": "Yunzai-Bot QQ 等级 / 签到插件 — 移植 XAutoDaily 任务功能到 Yunzai 平台 (13 组 / 51 任务)",
   "type": "module",
   "main": "index.js",
   "author": "lixfl",
