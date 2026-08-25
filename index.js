@@ -66,6 +66,10 @@ export default async function (e) {
       return showCookie(e)
     case '#qq签到':
       return runAll(e)
+    case '#qq一键':
+    case '#qq一键签到':
+    case '#qq全部':
+      return doOneClick(e, arg)
     case '#qq任务列表':
     case '#qq列表':
       return listTasks(e)
@@ -193,6 +197,106 @@ async function runAll(e) {
   }
 }
 
+/**
+ * 一键签到 — 智能执行：自动检查 cookie,缺啥补啥,然后跑全部任务
+ *
+ * 流程:
+ *   1. 检查当前所有账号的 cookie 状态
+ *   2. 计算所有任务所需的域 (从 xa_conf.yaml 反推)
+ *   3. 对缺失的域,自动发起 QR 登录 (按用户回复确认)
+ *   4. 登录完成后,跑全部已启用任务
+ *
+ * 用法:
+ *   #qq一键              - 智能模式,只登录缺失的域
+ *   #qq一键 all          - 强制重新登录所有域
+ *   #qq一键 force        - 同 all
+ */
+async function doOneClick(e, arg = '') {
+  const force = arg === 'all' || arg === 'force'
+  const all = cookie.readAll()
+  const uins = Object.keys(all)
+
+  // 1. 计算需要的域
+  const needDomains = new Set()
+  for (const g of getTaskGroups()) {
+    for (const t of (g.tasks || [])) {
+      if (!isEnabled(t.id)) continue
+      // 推断域
+      let host = ''
+      try { host = new URL(t.reqUrl).hostname } catch { continue }
+      if (host) needDomains.add(host)
+    }
+  }
+
+  // 映射到我们支持的登录域
+  const LOGIN_MAP = {
+    'act.qzone.qq.com': 'qzone.qq.com',
+    'h5.qzone.qq.com': 'qzone.qq.com',
+    'user.qzone.qq.com': 'qzone.qq.com',
+    'qun.qq.com': 'qun.qq.com',
+    'vip.video.qq.com': 'vip.qq.com',
+    'club.vip.qq.com': 'vip.qq.com',
+    'act.vip.qq.com': 'vip.qq.com',
+  }
+  const requiredLogins = new Set()
+  for (const d of needDomains) {
+    const mapped = LOGIN_MAP[d] || d
+    if (LOGIN_DOMAINS[mapped]) requiredLogins.add(mapped)
+  }
+
+  // 2. 检查已登录域
+  const loggedDomains = new Set()
+  for (const u of uins) {
+    for (const d of Object.keys(all[u] || {})) loggedDomains.add(d)
+  }
+
+  const missing = [...requiredLogins].filter(d => force || !loggedDomains.has(d))
+
+  // 3. 报告状态
+  let status = `[一键签到] 任务需要的登录域: ${[...requiredLogins].join(', ') || '(无)'}\n`
+  status += `[一键签到] 已登录域: ${[...loggedDomains].join(', ') || '(无)'}\n`
+  if (missing.length > 0) {
+    status += `[一键签到] 缺失域: ${missing.join(', ')}\n`
+  } else {
+    status += `[一键签到] 所有域已登录 ✓\n`
+  }
+  await e.reply(status)
+
+  // 4. 登录缺失的域
+  if (missing.length > 0) {
+    await e.reply(`开始登录缺失域,共 ${missing.length} 个. 每个 QR 60s 内有效,请按提示扫码...`)
+    const loginResults = {}
+    for (const domain of missing) {
+      try {
+        const r = await loginDomain(domain, {
+          onQR: async ({ path: p }) => {
+            await sendImage(e, p)
+            await e.reply(`请扫描此二维码登录 [${domain}]`)
+          },
+          onStatus: (s) => {
+            const map = { '66': '等待扫码', '67': '已扫码待确认', '65': '已扫码', '68': '失效', '0': '成功' }
+            e.reply(`状态: ${map[s.status] || s.status}`)
+          },
+        })
+        cookie.set(r.uin, domain, r.cookies)
+        loginResults[domain] = { ok: true, uin: r.uin }
+        await e.reply(`✓ ${domain} 登录成功 (QQ ${r.uin})`)
+      } catch (err) {
+        loginResults[domain] = { ok: false, error: err.message }
+        await e.reply(`✗ ${domain} 登录失败: ${err.message}`)
+      }
+    }
+    const failed = Object.entries(loginResults).filter(([_, r]) => !r.ok).map(([d]) => d)
+    if (failed.length === missing.length) {
+      return e.reply(`所有登录尝试均失败,跳过签到`)
+    }
+  }
+
+  // 5. 跑全部任务
+  await e.reply('开始执行所有已启用任务...')
+  await runAll(e)
+}
+
 async function listTasks(e) {
   const groups = getTaskGroups()
   const lines = ['任务列表（共 ' + groups.reduce((a, g) => a + (g.tasks || []).length, 0) + ' 个）:']
@@ -248,19 +352,30 @@ async function showHelp(e) {
   await e.reply([
     'yunzai_qqlevel 签到插件 帮助',
     '',
+    '【一键】',
+    '#qq一键            - 智能签到(检查缺失 cookie → 自动登录 → 执行任务)',
+    '#qq一键 all        - 强制重新登录所有域再签到',
+    '',
+    '【登录】',
     '#qq登录 [domain]   - 扫码登录指定域',
     '#qq登录 all        - 多域连续扫码登录',
     '#qq登录 列表       - 查看支持的登录域',
     '#qq刷新ck [domain] - 同 #qq登录',
+    '',
+    '【Cookie】',
     '#qqck              - 查看当前 cookie',
-    '#qq签到            - 立即执行所有任务',
+    '',
+    '【任务】',
+    '#qq签到            - 立即执行所有已启用任务',
     '#qq任务列表        - 列出所有任务',
     '#qq任务详情 <id>   - 查看任务详情',
     '#qq启用任务 <id>   - 启用指定任务',
     '#qq禁用任务 <id>   - 禁用指定任务',
+    '',
+    '【帮助】',
     '#qq签到帮助        - 本帮助',
     '',
-    `支持的域: ${Object.keys(LOGIN_DOMAINS).join(', ')}`,
+    `支持的登录域: ${Object.keys(LOGIN_DOMAINS).join(', ')}`,
   ].join('\n'))
 }
 
