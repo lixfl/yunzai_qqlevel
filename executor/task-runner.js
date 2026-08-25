@@ -133,10 +133,12 @@ async function runHttpTask(task, env, ctx) {
   if (allCookies) headers['Cookie'] = mergeCookies(headers['Cookie'], allCookies)
 
   let result = { ok: false, msg: 'no response' }
+  // 支持 task.repeat 为模板字符串 (如 "$repeat")
+  const repeatStr = format(String(task.repeat || '1'), env)
+  const repeat = Math.max(1, parseInt(repeatStr, 10) || 1)
   for (let i = 0; i < urls.length; i++) {
     const url = urls[i]
     const body = task.reqData ? format(task.reqData, env) : null
-    const repeat = parseInt(task.repeat || '1', 10)
     for (let r = 0; r < repeat; r++) {
       try {
         const res = task.reqMethod && task.reqMethod.toUpperCase() === 'GET'
