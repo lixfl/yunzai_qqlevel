@@ -1,0 +1,45 @@
+# yunzai_qqlevel 配置文件示例
+# 用户可以修改此文件定制插件行为
+# 路径: config/config.yaml (不存在会自动复制本示例)
+
+# 默认操作的 QQ 号 (登录后会自动填充)
+defaultUin: ""
+
+# 全局签到时间 (cron 表达式, 6 段, 秒 分 时 日 月 周)
+# 留空则使用每个任务自己的 cron
+dailyRunTime: ""
+
+# 一键签到默认范围
+# 'all' = 全部已启用, 'enabled' = 同 all, 'web' = 仅 web 任务, 'func' = 仅 func
+oneClickScope: "all"
+
+# 群白名单 (留空 = 不限制,所有群)
+# 续火/打卡/抽字符只在这些群内执行
+whitelist: []
+
+# 群黑名单 (优先级高于白名单)
+blacklist: []
+
+# 抽字符设置
+luckyChar:
+  enabled: true   # 是否启用抽字符
+  isSVIP: false   # bot 是否 SVIP (影响抽字符次数)
+
+# 默认续火文案 (任务未指定时使用)
+defaultMessage: "火"
+
+# 自定义登录域 (高级用户用)
+# 在这里添加从浏览器 F12 抓到的 s_url/daid/appid 三元组
+customLoginDomains:
+  # 例子: ti.qq.com (QQ打卡/字符)
+  # ti.qq.com:
+  #   s_url: "https://ti.qq.com/hybrid-h5/index"
+  #   daid: "76"
+  #   appid: "30014"
+
+# 任务启用状态覆盖
+# 在这里可以批量启用/禁用任务
+# true = 强制启用, false = 强制禁用, 不写 = 使用 data/tasks-state.json 的设置
+taskOverrides:
+  # 群打卡: true
+  # 波点音乐听歌: false

@@ -26,6 +26,7 @@ import * as cookie from './lib/cookie.js'
 import { getTaskGroups } from './lib/conf-loader.js'
 import { runTask } from './executor/task-runner.js'
 import { scheduleAll, stopAll } from './executor/scheduler.js'
+import { loadConfig, reloadConfig, isTaskEnabledByConfig, isGroupAllowed } from './lib/config.js'
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url))
 const DATA_DIR = path.resolve(__dirname, 'data')
@@ -42,8 +43,11 @@ function saveState(s) {
 }
 
 function isEnabled(taskId) {
-  const s = loadState()
-  return s[taskId] !== false
+  // config.yaml 中的 taskOverrides 优先
+  return isTaskEnabledByConfig(taskId, (id) => {
+    const s = loadState()
+    return s[id] !== false
+  })
 }
 
 function setEnabled(taskId, enabled) {
@@ -83,6 +87,12 @@ export default async function (e) {
     case '#qq签到帮助':
     case '#qq帮助':
       return showHelp(e)
+    case '#qq重载配置':
+    case '#qq配置重载':
+      return reloadCfgCmd(e)
+    case '#qq配置':
+    case '#qq配置查看':
+      return showConfigCmd(e)
   }
 }
 
@@ -372,10 +382,48 @@ async function showHelp(e) {
     '#qq启用任务 <id>   - 启用指定任务',
     '#qq禁用任务 <id>   - 禁用指定任务',
     '',
+    '【配置】',
+    '#qq配置            - 查看当前配置',
+    '#qq重载配置        - 重新加载 config/config.yaml',
+    '',
     '【帮助】',
     '#qq签到帮助        - 本帮助',
     '',
     `支持的登录域: ${Object.keys(LOGIN_DOMAINS).join(', ')}`,
+  ].join('\n'))
+}
+
+async function reloadCfgCmd(e) {
+  try {
+    const cfg = reloadConfig()
+    await e.reply([
+      '✓ 配置已重载',
+      `defaultUin: ${cfg.defaultUin || '(空)'}`,
+      `dailyRunTime: ${cfg.dailyRunTime || '(每任务各自)'}`,
+      `oneClickScope: ${cfg.oneClickScope}`,
+      `whitelist: ${cfg.whitelist.length === 0 ? '(不限)' : cfg.whitelist.join(',')}`,
+      `blacklist: ${cfg.blacklist.length === 0 ? '(无)' : cfg.blacklist.join(',')}`,
+      `luckyChar: enabled=${cfg.luckyChar.enabled} isSVIP=${cfg.luckyChar.isSVIP}`,
+      `taskOverrides: ${Object.keys(cfg.taskOverrides).length} 个任务被覆盖`,
+    ].join('\n'))
+  } catch (e) {
+    await e.reply('重载失败: ' + e.message)
+  }
+}
+
+async function showConfigCmd(e) {
+  const cfg = loadConfig()
+  await e.reply([
+    '当前配置 (config/config.yaml):',
+    `  defaultUin: ${cfg.defaultUin || '(未设置)'}`,
+    `  dailyRunTime: ${cfg.dailyRunTime || '(每任务各自)'}`,
+    `  oneClickScope: ${cfg.oneClickScope}`,
+    `  whitelist: ${cfg.whitelist.length === 0 ? '(不限)' : cfg.whitelist.join(',')}`,
+    `  blacklist: ${cfg.blacklist.length === 0 ? '(无)' : cfg.blacklist.join(',')}`,
+    `  luckyChar: enabled=${cfg.luckyChar.enabled} isSVIP=${cfg.luckyChar.isSVIP}`,
+    `  defaultMessage: ${cfg.defaultMessage}`,
+    `  customLoginDomains: ${Object.keys(cfg.customLoginDomains).length} 个`,
+    `  taskOverrides: ${JSON.stringify(cfg.taskOverrides)}`,
   ].join('\n'))
 }
 

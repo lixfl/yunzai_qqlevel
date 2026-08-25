@@ -6,5 +6,7 @@ package-lock.json
 .env.local
 data/
 !data/.gitkeep
+config/config.yaml
+!config/config.example.yaml
 .vscode/
 .idea/
