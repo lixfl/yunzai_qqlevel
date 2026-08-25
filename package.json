@@ -1,0 +1,24 @@
+{
+  "name": "yunzai_qqlevel",
+  "version": "1.0.0",
+  "description": "Yunzai-Bot QQ 等级/签到插件 — 复刻 XAutoDaily 的 HTTP 签到能力",
+  "type": "module",
+  "main": "index.js",
+  "author": "lixfl",
+  "license": "MIT",
+  "keywords": [
+    "yunzai",
+    "yunzai-bot",
+    "qq",
+    "signin",
+    "qqlevel",
+    "xautodaily"
+  ],
+  "scripts": {
+    "test": "echo 'no tests'"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {}
+}
