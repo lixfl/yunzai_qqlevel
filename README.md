@@ -33,6 +33,9 @@
 # 配置
 #qq配置 / #qq重载配置
 
+# 小程序
+#qq小程序状态 / #qq禁用小程序
+
 # 帮助
 #qq签到帮助
 ```
@@ -45,12 +48,29 @@
 | OneBot 模拟任务 | 6 | ✅ 真正可用（用 icqq Yunzai API） |
 | 小程序任务 | 6 | ⚠️ 仅 HTTP 部分 |
 
-### 无法实现（需要 Xposed Hook）
+### 小程序 (mini) 任务 — 6 个
+
+| 任务 | 域 | 业务结果 |
+|------|----|----------|
+| 情侣空间打卡 | qqmp.welove520.com | 需小程序 access_token |
+| 300英雄营地签到 | m300wxapp.jumpw.com | 需登录态 |
+| 王者营地点赞 | ssl.kohsocialapp.qq.com | 需登录态 |
+| 王者营地浏览 | ssl.kohsocialapp.qq.com | 需登录态 |
+| 王者营地签到 | kohcamp.qq.com | 需登录态 |
+| 王者营地分享 | ssl.kohsocialapp.qq.com | 需登录态 |
+
+**HTTP 接口可达（返回 200），但业务失败**：所有 mini 任务都需要**小程序登录态**（access_token / openid），外部 Yunzai bot 无法获取 XAutoDaily 在 QQ 客户端内部能拿到的登录态。
+
+**解决方案**：
+- 批量禁用：`#qq禁用小程序`
+- 查看状态：`#qq小程序状态`
+- 单独启用：`#qq启用任务 <id>`（用户自己从浏览器抓小程序 cookie）
+
+### 其他无法实现（需要 Xposed Hook）
 
 | 功能 | 说明 |
 |------|------|
 | QZone 亲密空间签到 | 需要 ViewModel 调用 |
-| 部分小程序签到 | 需要 miniAppId 登录态 |
 
 ---
 

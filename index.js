@@ -93,6 +93,12 @@ export default async function (e) {
     case '#qq配置':
     case '#qq配置查看':
       return showConfigCmd(e)
+    case '#qq禁用小程序':
+    case '#qq禁用mini':
+      return disableMiniTasks(e)
+    case '#qq小程序状态':
+    case '#qqmini状态':
+      return showMiniStatus(e)
   }
 }
 
@@ -386,6 +392,10 @@ async function showHelp(e) {
     '#qq配置            - 查看当前配置',
     '#qq重载配置        - 重新加载 config/config.yaml',
     '',
+    '【小程序】',
+    '#qq小程序状态      - 查看小程序任务启用状态',
+    '#qq禁用小程序      - 一键禁用所有小程序任务',
+    '',
     '【帮助】',
     '#qq签到帮助        - 本帮助',
     '',
@@ -425,6 +435,54 @@ async function showConfigCmd(e) {
     `  customLoginDomains: ${Object.keys(cfg.customLoginDomains).length} 个`,
     `  taskOverrides: ${JSON.stringify(cfg.taskOverrides)}`,
   ].join('\n'))
+}
+
+/**
+ * 一键禁用所有小程序任务 (mini 任务需要小程序登录态,外部 bot 无法获取)
+ */
+async function disableMiniTasks(e) {
+  const groups = getTaskGroups()
+  let count = 0
+  const disabled = []
+  for (const g of groups) {
+    if (!(g.type || '').startsWith('mini|')) continue
+    for (const t of (g.tasks || [])) {
+      setEnabled(t.id, false)
+      disabled.push(t.id)
+      count++
+    }
+  }
+  await e.reply([
+    `✓ 已禁用 ${count} 个小程序任务`,
+    disabled.length > 0 ? disabled.map(x => `  - ${x}`).join('\n') : '(无)',
+    '',
+    '说明: 小程序任务需要小程序登录态,QQ 客户端外部 bot 无法获取.',
+    '如需启用,使用: #qq启用任务 <任务ID>',
+  ].join('\n'))
+}
+
+/**
+ * 查看小程序任务状态
+ */
+async function showMiniStatus(e) {
+  const groups = getTaskGroups()
+  const lines = ['小程序 (mini) 任务状态:']
+  let total = 0, enabled = 0
+  for (const g of groups) {
+    if (!(g.type || '').startsWith('mini|')) continue
+    for (const t of (g.tasks || [])) {
+      total++
+      const ok = isEnabled(t.id)
+      if (ok) enabled++
+      lines.push(`  ${ok ? '✓' : '✗'} ${t.id} (${g.id})`)
+    }
+  }
+  lines.push('')
+  lines.push(`共 ${total} 个,启用 ${enabled} 个`)
+  lines.push('')
+  lines.push('提示: 小程序任务需要小程序登录态,目前无法自动获取.')
+  lines.push('批量禁用: #qq禁用小程序')
+  await e.reply(lines.join('\n'))
 }
 
 export async function onFirstLaunch() {
