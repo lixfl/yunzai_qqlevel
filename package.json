@@ -1,7 +1,7 @@
 {
   "name": "yunzai_qqlevel",
-  "version": "1.0.0",
-  "description": "Yunzai-Bot QQ 等级/签到插件 — 复刻 XAutoDaily 的 HTTP 签到能力",
+  "version": "2.0.0",
+  "description": "Yunzai-Bot QQ 等级 / 签到插件 — 移植 XAutoDaily 全部功能到 Yunzai 平台",
   "type": "module",
   "main": "index.js",
   "author": "lixfl",
@@ -12,13 +12,19 @@
     "qq",
     "signin",
     "qqlevel",
-    "xautodaily"
+    "xautodaily",
+    "aioqzone"
   ],
   "scripts": {
-    "test": "echo 'no tests'"
+    "test": "node -e \"import('./lib/conf-loader.js').then(m => console.log(m.getStats()))\"",
+    "dev": "node --watch index.js"
   },
   "engines": {
     "node": ">=18"
   },
-  "dependencies": {}
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "node-cron": "^3.0.3",
+    "tough-cookie": "^4.1.4"
+  }
 }

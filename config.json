@@ -1,7 +1,5 @@
 {
-  "cookie": "",
+  "note": "yunzai_qqlevel 插件根配置",
   "userId": "",
-  "groupList": [],
-  "miniAppList": [],
   "time": "30 7 * * *"
 }
