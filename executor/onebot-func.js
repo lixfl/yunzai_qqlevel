@@ -215,6 +215,111 @@ register('SendMessageManager/sendMessage/group', async (task, env, ctx, query) =
 })
 
 /**
+ * 群续火 + 抽字符 + 群打卡 三合一 (借鉴 Plugin-Example V1.1)
+ *
+ * 完整复刻参考插件的逻辑:
+ *   1. 拿一句诗词 (oiapi.net)
+ *   2. 遍历 bot.gl 中的群
+ *   3. 对每个群:
+ *      a. HTTP 抽 n 次字符 (SVIP=3 次, 普通=1 次)
+ *      b. 把字符结果拼到消息里
+ *      c. Bot.pickGroup(id).sendMsg(诗词 + 字符结果)
+ *      d. Bot.pickGroup(id).sign()
+ *
+ * reqUrl: xa://GroupXuhuoManager/run?lucky=1&isSVIP=0
+ * env:
+ *   - text (默认续火文案): "火"
+ *   - isSVIP (bool): 是否是 SVIP,影响抽字符次数
+ *   - blacklist (群 id 列表): 排除的群
+ */
+register('GroupXuhuoManager/run', async (task, env, ctx, query) => {
+  const { uin } = ctx
+  const bot = pickBot(ctx)
+  if (!bot) return { ok: false, msg: 'no bot available' }
+
+  const text = query.text || env.text || '火'
+  const isSVIP = String(query.isSVIP || env.isSVIP || '0') === '1' || query.isSVIP === 'true'
+  const luckyEnabled = String(query.lucky || env.lucky || '1') !== '0'
+  const blacklist = (env.blacklist || '').split(',').map(s => s.trim()).filter(Boolean)
+
+  // 1. 拿一句诗词
+  let poem = await fetchSentence() || text
+
+  // 2. 遍历 bot 的群
+  if (!bot.gl) return { ok: false, msg: 'bot.gl 不可用' }
+  const groupList = [...bot.gl.keys()].map(String).filter(g => !blacklist.includes(g))
+
+  const results = []
+  for (const gid of groupList) {
+    const tips = []
+
+    // 3a. 抽字符
+    if (luckyEnabled) {
+      const n = isSVIP ? 3 : 1
+      const ckObj = cookie.get(uin, 'qun.qq.com') || cookie.get(uin, 'global') || {}
+      const bkn = (() => {
+        const s = ckObj.p_skey || ckObj.skey || ''
+        let h = 5381
+        for (const c of s) h = ((h << 5) + h + c.charCodeAt(0)) & 0x7fffffff
+        return h
+      })()
+      const url = `https://qun.qq.com/v2/luckyword/proxy/domain/qun.qq.com/cgi-bin/group_lucky_word/draw_lottery?bkn=${bkn}`
+
+      for (let i = 0; i < n; i++) {
+        try {
+          const res = await httpPost(url, {
+            headers: {
+              'Content-Type': 'application/json;charset=UTF-8',
+              'Cookie': cookie.stringify(ckObj),
+              'qname-service': '976321:131072',
+              'qname-space': 'Production',
+            },
+            body: { group_code: gid },
+          })
+          const j = res.json || {}
+          // 参考插件: retcode === 0 才算成功,11005 表示已抽过
+          if (j.retcode === 0 && j.data?.word_info) {
+            const wi = j.data.word_info.word_info || {}
+            tips.push(`机器人为本群抽中了字符[${wi.wording || ''}]\r寓意为:[${wi.word_desc || ''}]`)
+          }
+        } catch {}
+      }
+    }
+
+    // 3b+3c. 发续火 + 字符结果
+    const fullMsg = poem + (tips.length ? '\r' + tips.join('\r') : '')
+    try {
+      if (typeof bot.pickGroup === 'function') {
+        await bot.pickGroup(Number(gid) || gid).sendMsg(fullMsg)
+      } else if (typeof bot.sendGroupMsg === 'function') {
+        await bot.sendGroupMsg(Number(gid) || gid, fullMsg)
+      }
+    } catch (e) {
+      results.push({ group: gid, ok: false, sendErr: e.message })
+      continue
+    }
+
+    // 3d. 群打卡
+    let signedOk = false
+    try {
+      if (typeof bot.pickGroup === 'function') {
+        const group = bot.pickGroup(Number(gid) || gid)
+        if (group && typeof group.sign === 'function') {
+          await group.sign()
+          signedOk = true
+        }
+      }
+    } catch {}
+
+    results.push({ group: gid, ok: true, tips: tips.length, signed: signedOk })
+    if (task.delay) await sleep((task.delay || 60) * 1000)
+  }
+
+  const okCount = results.filter(r => r.ok).length
+  return { ok: okCount > 0, data: results, summary: `${okCount}/${results.length} 群续火+抽字符+打卡成功` }
+})
+
+/**
  * 好友续火
  *
  * reqUrl: xa://SendMessageManager/sendMessage/friend?uin=${friends}$&msg=${message}$
