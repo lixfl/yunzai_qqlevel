@@ -93,12 +93,13 @@ export class QqLevelPlugin extends plugin {
           await QqLevelPlugin._sendImage(e, pngBuffer || path)
           await e.reply('请扫描此二维码登录 [' + domain + ']')
         },
-        onStatus: (s) => {
-          const map = { '66': '等待扫码', '67': '已扫码待确认', '65': '已扫码', '68': '二维码已失效', '0': '成功' }
+        onStatusChange: (s) => {
+          // 只在状态变化时回调,避免重复刷屏
+          const map = { '66': '⏳ 等待扫码', '67': '📱 已扫码待确认', '65': '✓ 已扫码', '68': '❌ 二维码已失效', '0': '✅ 成功' }
           if (s.status === '-2') {
-            e.reply(`状态: -2 (网络错误: ${s.message || '服务器拒绝'})`)
+            e.reply(`❌ 网络错误: ${s.message || '服务器拒绝'}`)
           } else {
-            e.reply(`状态: ${map[s.status] || s.message || s.status}`)
+            e.reply(`${map[s.status] || (s.message || s.status)}`)
           }
         },
       })
@@ -117,6 +118,14 @@ export class QqLevelPlugin extends plugin {
       onQR: async ({ pngBuffer, path, domain }) => {
         await QqLevelPlugin._sendImage(e, pngBuffer || path)
         await e.reply(`请扫描此二维码登录 [${domain}]`)
+      },
+      onStatusChange: (s) => {
+        const map = { '66': '⏳ 等待扫码', '67': '📱 已扫码待确认', '65': '✓ 已扫码', '68': '❌ 二维码已失效', '0': '✅ 成功' }
+        if (s.status === '-2') {
+          e.reply(`❌ 网络错误: ${s.message || '服务器拒绝'}`)
+        } else {
+          e.reply(`${map[s.status] || (s.message || s.status)}`)
+        }
       },
       onDomainDone: async (d, r) => { await e.reply(`${d} 登录${r.ok ? '成功' : '失败: ' + r.error}`) },
       onAllDone: async (all) => {
@@ -218,9 +227,14 @@ export class QqLevelPlugin extends plugin {
               await QqLevelPlugin._sendImage(e, pngBuffer || p)
               await e.reply(`请扫描此二维码登录 [${domain}]`)
             },
-            onStatus: (s) => {
-              const map = { '66': '等待扫码', '67': '已扫码待确认', '65': '已扫码', '68': '失效', '0': '成功' }
-              e.reply(`状态: ${map[s.status] || s.status}`)
+            onStatusChange: (s) => {
+              // 只在状态变化时回调,避免重复刷屏
+              const map = { '66': '⏳ 等待扫码', '67': '📱 已扫码待确认', '65': '✓ 已扫码', '68': '❌ 二维码已失效', '0': '✅ 成功' }
+              if (s.status === '-2') {
+                e.reply(`❌ ${domain} 网络错误: ${s.message || '服务器拒绝'}`)
+              } else {
+                e.reply(`${map[s.status] || (s.message || s.status)}`)
+              }
             },
           })
           cookie.set(r.uin, domain, r.cookies)
