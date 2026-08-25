@@ -88,7 +88,11 @@ export class QqLevelPlugin extends plugin {
     try {
       await e.reply(`开始扫码登录 [${domain}],请在 60 秒内扫描二维码...`)
       const r = await loginDomain(domain, {
-        onQR: async ({ path }) => { await QqLevelPlugin._sendImage(e, path) },
+        onQR: async ({ pngBuffer, path }) => {
+          // 直接传 Buffer,避免落盘后读文件丢失 mime 信息
+          await QqLevelPlugin._sendImage(e, pngBuffer || path)
+          await e.reply('请扫描此二维码登录 [' + domain + ']')
+        },
         onStatus: (s) => {
           const map = { '66': '等待扫码', '67': '已扫码待确认', '65': '已扫码', '68': '二维码已失效', '0': '成功' }
           if (s.status === '-2') {
@@ -110,8 +114,8 @@ export class QqLevelPlugin extends plugin {
     await e.reply('开始多域登录,将依次显示二维码,请按顺序扫码...')
     await loginMultiDomain(Object.keys(LOGIN_DOMAINS), {
       onDomainStart: async (d) => { await e.reply(`准备登录域: ${d}`) },
-      onQR: async ({ path, domain }) => {
-        await QqLevelPlugin._sendImage(e, path)
+      onQR: async ({ pngBuffer, path, domain }) => {
+        await QqLevelPlugin._sendImage(e, pngBuffer || path)
         await e.reply(`请扫描此二维码登录 [${domain}]`)
       },
       onDomainDone: async (d, r) => { await e.reply(`${d} 登录${r.ok ? '成功' : '失败: ' + r.error}`) },
@@ -210,8 +214,8 @@ export class QqLevelPlugin extends plugin {
       for (const domain of missing) {
         try {
           const r = await loginDomain(domain, {
-            onQR: async ({ path: p }) => {
-              await QqLevelPlugin._sendImage(e, p)
+            onQR: async ({ pngBuffer, path: p }) => {
+              await QqLevelPlugin._sendImage(e, pngBuffer || p)
               await e.reply(`请扫描此二维码登录 [${domain}]`)
             },
             onStatus: (s) => {
@@ -373,40 +377,62 @@ export class QqLevelPlugin extends plugin {
 
   // ==================== 工具方法 ====================
 
-  static async _sendImage(e, filePath) {
+  /**
+   * 发送图片到群/私聊
+   * @param {object} e Yunzai 事件
+   * @param {Buffer|string} input - Buffer / 文件路径 / base64 / dataURI
+   * 参考 yunzai-plugin-qqlevel 实现: Buffer.from(base64,'base64') -> segment.image(buffer)
+   */
+  static async _sendImage(e, input) {
+    let buffer = null
+    let fallbackPath = null
     try {
-      // 读取文件为 Buffer 和 base64
-      const buffer = fs.readFileSync(filePath)
-      const base64 = buffer.toString('base64')
+      // 1. 标准化输入 -> Buffer
+      if (Buffer.isBuffer(input)) {
+        buffer = input
+      } else if (typeof input === 'string') {
+        if (input.startsWith('data:image')) {
+          buffer = Buffer.from(input.split(',', 2)[1] || '', 'base64')
+        } else if (/^[A-Za-z0-9+/=]{100,}$/.test(input)) {
+          // 纯 base64 字符串
+          buffer = Buffer.from(input, 'base64')
+        } else {
+          // 文件路径
+          fallbackPath = input
+          buffer = fs.readFileSync(input)
+        }
+      }
+      if (!buffer || buffer.length === 0) throw new Error('图片数据为空')
 
-      // 优先用 Yunzai 的 e.reply + segment.image(Buffer)
-      // 注意: TRSS-Yunzai + NapCat 不接受 file:// URI,
-      //      必须传 Buffer 让 icqq/napcat 内部处理上传
+      // 2. Yunzai e.reply + segment.image(Buffer) - 参考 yunzai-plugin-qqlevel
       if (typeof e.reply === 'function') {
-        const _seg = global.segment || (await import('oicq')).segment
-        // 方式1: 传 Buffer (推荐,内部自动处理 base64 + 上传)
-        await e.reply(_seg.image(buffer))
+        const _seg = global.segment || (await import('oicq').then(m => m.segment).catch(() => null))
+        if (_seg && _seg.image) {
+          await e.reply(_seg.image(buffer))
+          return
+        }
+        // segment 不可用, 直接用 Yunzai 通用方法
+        await e.reply(Buffer.from(buffer))
         return
       }
 
-      // 降级: 直接 OneBot sendApi
-      // 用 base64:// 协议让 NapCat 处理 (比 file:// 更兼容)
+      // 3. 降级 OneBot sendApi (base64://)
       if (e.bot && typeof e.bot.sendApi === 'function') {
-        const groupId = e.group_id
-        const userId = e.user_id
+        const base64 = buffer.toString('base64')
         const msg = [{ type: 'image', data: { file: `base64://${base64}` } }]
-        if (groupId) {
-          await e.bot.sendApi('send_group_msg', { group_id: groupId, message: msg })
-        } else if (userId) {
-          await e.bot.sendApi('send_private_msg', { user_id: userId, message: msg })
+        if (e.group_id) {
+          await e.bot.sendApi('send_group_msg', { group_id: e.group_id, message: msg })
+        } else if (e.user_id) {
+          await e.bot.sendApi('send_private_msg', { user_id: e.user_id, message: msg })
         }
         return
       }
 
-      await e.reply?.(`QR 已保存到: ${filePath}`)
+      // 4. 兜底
+      await e.reply?.(`QR 已保存到: ${fallbackPath || '(内存数据, 未发送)'}`)
     } catch (err) {
       logger.error('[yunzai_qqlevel] 发送图片失败:', err.message)
-      try { await e.reply?.(`QR 已保存到: ${filePath}`) } catch {}
+      try { await e.reply?.(`QR 已保存到: ${fallbackPath || '(发送失败)'}\n原因: ${err.message}`) } catch {}
     }
   }
 }
