@@ -91,7 +91,11 @@ export class QqLevelPlugin extends plugin {
         onQR: async ({ path }) => { await QqLevelPlugin._sendImage(e, path) },
         onStatus: (s) => {
           const map = { '66': '等待扫码', '67': '已扫码待确认', '65': '已扫码', '68': '二维码已失效', '0': '成功' }
-          e.reply(`状态: ${map[s.status] || s.message || s.status}`)
+          if (s.status === '-2') {
+            e.reply(`状态: -2 (网络错误: ${s.message || '服务器拒绝'})`)
+          } else {
+            e.reply(`状态: ${map[s.status] || s.message || s.status}`)
+          }
         },
       })
       cookie.set(r.uin, domain, r.cookies)
@@ -371,22 +375,29 @@ export class QqLevelPlugin extends plugin {
 
   static async _sendImage(e, filePath) {
     try {
-      const fs = await import('node:fs')
-      const base64 = fs.readFileSync(filePath).toString('base64')
-      if (e.bot && e.bot.sendApi) {
+      // 优先使用 Yunzai 标准 segment.image() (e.reply)
+      // e.reply 是 Yunzai 提供的统一接口,内部处理协议差异
+      if (typeof e.reply === 'function') {
+        const _seg = global.segment || (await import('oicq')).segment
+        await e.reply(_seg.image(`file://${filePath}`))
+        return
+      }
+      // 降级: 直接用 OneBot sendApi (协议端如 NapCat/LLOneBot)
+      if (e.bot && typeof e.bot.sendApi === 'function') {
         const groupId = e.group_id
         const userId = e.user_id
+        const msg = [{ type: 'image', data: { file: `file://${filePath}` } }]
         if (groupId) {
-          await e.bot.sendApi('send_group_msg', { group_id: groupId, message: [{ type: 'image', data: { base64 } }] })
+          await e.bot.sendApi('send_group_msg', { group_id: groupId, message: msg })
         } else if (userId) {
-          await e.bot.sendApi('send_private_msg', { user_id: userId, message: [{ type: 'image', data: { base64 } }] })
+          await e.bot.sendApi('send_private_msg', { user_id: userId, message: msg })
         }
-      } else if (e.reply) {
-        await e.reply(segment.image(`base64://${base64}`))
+        return
       }
+      await e.reply?.(`QR 已保存到: ${filePath}`)
     } catch (err) {
       logger.error('[yunzai_qqlevel] 发送图片失败:', err.message)
-      await e.reply(`QR 已保存到: ${filePath}`)
+      try { await e.reply?.(`QR 已保存到: ${filePath}`) } catch {}
     }
   }
 }
