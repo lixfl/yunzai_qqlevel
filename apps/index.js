@@ -165,11 +165,24 @@ export class QqLevelPlugin extends plugin {
   async qqSign(e) {
     const groups = getTaskGroups()
     const all = cookie.readAll()
+    const cfg = Config.getConfig('config')
     const uins = Object.keys(all)
     if (uins.length === 0) return e.reply('请先 #qq登录')
-    await e.reply(`开始执行签到任务,账号: ${uins.join(', ')}`)
+    // 显示 QQ 时去除前导 0 (QQ 内部用 10 位表示)
+    const display = uins.map(u => u.replace(/^0+/, '') || '0').join(', ')
+    const cfgInfo = [
+      `whitelist: ${cfg.whitelist?.length ? cfg.whitelist.length + ' 群' : '(不限)'}`,
+      `blacklist: ${cfg.blacklist?.length ? cfg.blacklist.length + ' 群' : '(无)'}`,
+      `taskOverrides: ${Object.keys(cfg.taskOverrides || {}).length}`,
+    ].join(', ')
+    await e.reply(`开始执行签到任务,账号: ${display}\n配置: ${cfgInfo}`)
     for (const uin of uins) {
-      const ctx = { uin, bot: e.bot || global.Bot, logger }
+      const ctx = {
+        uin,
+        bot: e.bot || global.Bot,
+        logger,
+        config: cfg,
+      }
       const summary = []
       for (const g of groups) {
         for (const t of (g.tasks || [])) {
@@ -182,7 +195,8 @@ export class QqLevelPlugin extends plugin {
           }
         }
       }
-      await e.reply(`QQ ${uin} 执行结果:\n${summary.join('\n')}`)
+      const uinDisplay = uin.replace(/^0+/, '') || '0'
+      await e.reply(`QQ ${uinDisplay} 执行结果:\n${summary.join('\n')}`)
     }
     return true
   }
@@ -190,7 +204,9 @@ export class QqLevelPlugin extends plugin {
   async qqOneClick(e) {
     const force = /\ball\b/.test(e.msg)
     const all = cookie.readAll()
+    const cfg = Config.getConfig('config')
     const uins = Object.keys(all)
+    if (uins.length === 0) return e.reply('请先 #qq登录')
     const needDomains = new Set()
     for (const g of getTaskGroups()) {
       for (const t of (g.tasks || [])) {
@@ -213,9 +229,12 @@ export class QqLevelPlugin extends plugin {
     for (const u of uins) for (const d of Object.keys(all[u] || {})) loggedDomains.add(d)
     const missing = [...requiredLogins].filter(d => force || !loggedDomains.has(d))
 
-    let status = `[一键签到] 任务需要的登录域: ${[...requiredLogins].join(', ') || '(无)'}\n`
+    const uinDisplay = uins.map(u => u.replace(/^0+/, '') || '0').join(', ')
+    let status = `[一键签到] 账号: ${uinDisplay}\n`
+    status += `[一键签到] 任务需要的登录域: ${[...requiredLogins].join(', ') || '(无)'}\n`
     status += `[一键签到] 已登录域: ${[...loggedDomains].join(', ') || '(无)'}\n`
     status += missing.length > 0 ? `[一键签到] 缺失域: ${missing.join(', ')}\n` : `[一键签到] 所有域已登录 ✓\n`
+    status += `[一键签到] 配置: 白名单=${cfg.whitelist?.length || 0}群, 黑名单=${cfg.blacklist?.length || 0}群, taskOverrides=${Object.keys(cfg.taskOverrides || {}).length}\n`
     await e.reply(status)
 
     if (missing.length > 0) {
