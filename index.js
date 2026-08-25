@@ -21,9 +21,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import url from 'node:url'
-import { loginFlow, loginDomain, loginMultiDomain, fetchQRCode, LOGIN_DOMAINS, DEFAULT_DOMAIN } from './lib/login.js'
+import { loginFlow, loginDomain, loginMultiDomain, fetchQRCode, cleanupQRCache, LOGIN_DOMAINS, DEFAULT_DOMAIN } from './lib/login.js'
 import * as cookie from './lib/cookie.js'
-import { getTaskGroups } from './lib/conf-loader.js'
+import { getTaskGroups, getStats } from './lib/conf-loader.js'
 import { runTask } from './executor/task-runner.js'
 import { scheduleAll, stopAll } from './executor/scheduler.js'
 import { loadConfig, reloadConfig, isTaskEnabledByConfig, isGroupAllowed } from './lib/config.js'
@@ -80,6 +80,9 @@ export default async function (e) {
     case '#qq任务详情':
     case '#qq详情':
       return showTask(e, arg)
+    case '#qq统计':
+    case '#qqstats':
+      return showStats(e)
     case '#qq启用任务':
       return setTask(e, arg, true)
     case '#qq禁用任务':
@@ -307,6 +310,37 @@ async function doOneClick(e, arg = '') {
   await runAll(e)
 }
 
+/**
+ * 统计信息
+ */
+async function showStats(e) {
+  const stats = getStats()
+  const cookies = cookie.readAll()
+  const uins = Object.keys(cookies)
+  const cfg = loadConfig()
+  const lines = [
+    'yunzai_qqlevel 统计',
+    '',
+    `任务配置 (xa_conf v${stats.version}):`,
+    `  任务组: ${stats.totalGroups}`,
+    `  任务总数: ${stats.totalTasks}`,
+    `  web: ${stats.byType.web}`,
+    `  func: ${stats.byType.func}`,
+    `  mini: ${stats.byType.mini || 0}`,
+    '',
+    `已登录账号: ${uins.length}`,
+    ...uins.map(u => `  QQ ${u}: ${Object.keys(cookies[u]).join(', ')}`),
+    '',
+    `配置 (config/config.yaml):`,
+    `  群白名单: ${cfg.whitelist.length === 0 ? '(不限)' : cfg.whitelist.length + ' 个'}`,
+    `  群黑名单: ${cfg.blacklist.length === 0 ? '(无)' : cfg.blacklist.length + ' 个'}`,
+    `  taskOverrides: ${Object.keys(cfg.taskOverrides).length} 个`,
+    `  taskCronOverrides: ${Object.keys(cfg.taskCronOverrides).length} 个`,
+    `  luckyChar: ${cfg.luckyChar.enabled ? '启用' : '禁用'} (${cfg.luckyChar.isSVIP ? 'SVIP' : '普通'})`,
+  ]
+  await e.reply(lines.join('\n'))
+}
+
 async function listTasks(e) {
   const groups = getTaskGroups()
   const lines = ['任务列表（共 ' + groups.reduce((a, g) => a + (g.tasks || []).length, 0) + ' 个）:']
@@ -381,6 +415,7 @@ async function showHelp(e) {
     '#qq任务详情 <id>   - 查看任务详情',
     '#qq启用任务 <id>   - 启用指定任务',
     '#qq禁用任务 <id>   - 禁用指定任务',
+    '#qq统计            - 查看任务/账号/配置统计',
     '',
     '【配置】',
     '#qq配置            - 查看当前配置',
@@ -430,6 +465,14 @@ async function showConfigCmd(e) {
 export async function onFirstLaunch() {
   console.log('[yunzai_qqlevel] 启动，初始化数据目录...')
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
+
+  // 清理 24 小时前的 QR 临时文件
+  try {
+    const removed = cleanupQRCache()
+    if (removed > 0) console.log(`[yunzai_qqlevel] 清理 ${removed} 个过期 QR 文件`)
+  } catch (e) {
+    console.warn('[yunzai_qqlevel] QR 清理失败:', e.message)
+  }
 
   const ctx = { uin: Object.keys(cookie.readAll())[0] || '', bot: global.Bot, logger: console }
   try {

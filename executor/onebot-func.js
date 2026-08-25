@@ -130,12 +130,7 @@ register('GroupLuckyWordManager/draw', async (task, env, ctx, query) => {
   groups = filterGroups(groups)
 
   const ckObj = cookie.get(uin, 'qun.qq.com') || cookie.get(uin, 'global') || {}
-  const bkn = (() => {
-    const s = ckObj.p_skey || ckObj.skey || ''
-    let h = 5381
-    for (const c of s) h = ((h << 5) + h + c.charCodeAt(0)) & 0x7fffffff
-    return h
-  })()
+  const bkn = computeBkn(ckObj)
 
   const cookieStr = cookie.stringify(ckObj)
   const url = `https://qun.qq.com/v2/luckyword/proxy/domain/qun.qq.com/cgi-bin/group_lucky_word/draw_lottery?bkn=${bkn}`
@@ -266,12 +261,7 @@ register('GroupXuhuoManager/run', async (task, env, ctx, query) => {
     if (luckyEnabled) {
       const n = isSVIP ? 3 : 1
       const ckObj = cookie.get(uin, 'qun.qq.com') || cookie.get(uin, 'global') || {}
-      const bkn = (() => {
-        const s = ckObj.p_skey || ckObj.skey || ''
-        let h = 5381
-        for (const c of s) h = ((h << 5) + h + c.charCodeAt(0)) & 0x7fffffff
-        return h
-      })()
+      const bkn = computeBkn(ckObj)
       const url = `https://qun.qq.com/v2/luckyword/proxy/domain/qun.qq.com/cgi-bin/group_lucky_word/draw_lottery?bkn=${bkn}`
 
       for (let i = 0; i < n; i++) {
@@ -519,6 +509,17 @@ register('FavoriteManager/favoriteAllVoter', async (task, env, ctx, query) => {
   const okCount = results.filter(r => r.ok).length
   return { ok: okCount > 0, data: results, summary: `${okCount}/${results.length} 回赞成功` }
 })
+
+/**
+ * 从 cookie object 计算 bkn
+ * 复用 lib/crypto.js 的算法,避免多处重复
+ */
+function computeBkn(ckObj) {
+  const s = ckObj.p_skey || ckObj.skey || ''
+  let h = 5381
+  for (const c of s) h = ((h << 5) + h + c.charCodeAt(0)) & 0x7fffffff
+  return h
+}
 
 /**
  * 过滤群列表:根据 config.yaml 的 whitelist/blacklist
