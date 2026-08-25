@@ -375,18 +375,26 @@ export class QqLevelPlugin extends plugin {
 
   static async _sendImage(e, filePath) {
     try {
-      // 优先使用 Yunzai 标准 segment.image() (e.reply)
-      // e.reply 是 Yunzai 提供的统一接口,内部处理协议差异
+      // 读取文件为 Buffer 和 base64
+      const buffer = fs.readFileSync(filePath)
+      const base64 = buffer.toString('base64')
+
+      // 优先用 Yunzai 的 e.reply + segment.image(Buffer)
+      // 注意: TRSS-Yunzai + NapCat 不接受 file:// URI,
+      //      必须传 Buffer 让 icqq/napcat 内部处理上传
       if (typeof e.reply === 'function') {
         const _seg = global.segment || (await import('oicq')).segment
-        await e.reply(_seg.image(`file://${filePath}`))
+        // 方式1: 传 Buffer (推荐,内部自动处理 base64 + 上传)
+        await e.reply(_seg.image(buffer))
         return
       }
-      // 降级: 直接用 OneBot sendApi (协议端如 NapCat/LLOneBot)
+
+      // 降级: 直接 OneBot sendApi
+      // 用 base64:// 协议让 NapCat 处理 (比 file:// 更兼容)
       if (e.bot && typeof e.bot.sendApi === 'function') {
         const groupId = e.group_id
         const userId = e.user_id
-        const msg = [{ type: 'image', data: { file: `file://${filePath}` } }]
+        const msg = [{ type: 'image', data: { file: `base64://${base64}` } }]
         if (groupId) {
           await e.bot.sendApi('send_group_msg', { group_id: groupId, message: msg })
         } else if (userId) {
@@ -394,6 +402,7 @@ export class QqLevelPlugin extends plugin {
         }
         return
       }
+
       await e.reply?.(`QR 已保存到: ${filePath}`)
     } catch (err) {
       logger.error('[yunzai_qqlevel] 发送图片失败:', err.message)
