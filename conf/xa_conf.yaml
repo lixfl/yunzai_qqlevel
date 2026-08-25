@@ -2313,38 +2313,6 @@ taskGroups:
           sucMsg: $msg
           errMsg: $msg
           replaces: []
-      - id: 大会员个性点赞（仅完成）
-        desc: 21点自动提交任务，需手动配置空间个性赞，并且在21点前手动点赞（该任务无法自动完成）
-        cron: 0 0 21 * * *
-        relay:
-        rear:
-        envs:
-        conditions:
-        repeat: 1
-        delay: 0
-        reqUrl: https://h5.qzone.qq.com/v2/vip/dhy/trpc/taskcenter/ExpressPrize/Express?g_tk=${ps_tk}$
-        reqMethod: post
-        reqHeaders:
-          referer: $req_url
-        reqData: '{"appID":"qq_big_vip","taskID":"task_use_qq_big_vip_qzone_praise","clientPlat":1}'
-        domain: qzone.qq.com
-        callback:
-          dataRegex:
-          extracts:
-            - from: data
-              match: $.data.code
-              key: ret
-              value: $this
-            - from: data
-              match: $.data.message
-              key: msg
-              value: $this
-          assert:
-            key: $ret
-            value: 0
-          sucMsg: $msg
-          errMsg: $msg
-          replaces: []
       - id: 登陆我的访客（完成任务）
         desc: 登陆我的访客并且完成任务，5点大会员成长值
         cron: 0 0 0 * * *
