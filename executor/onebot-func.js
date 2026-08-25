@@ -409,13 +409,6 @@ register('YunDongStepsManager/reportSteps', async (task, env, ctx, query) => {
 })
 
 /**
- * QZone 亲密空间签到 — 暂不支持
- */
-register('QZIntimateSpaceManager/doCheckInRequest', async () => {
-  return { ok: false, msg: 'QZone 亲密空间签到需要 Xposed 注入 QQ 客户端，外部 bot 无法实现' }
-})
-
-/**
  * 好友名片点赞 — 通过 bot.pickFriend(uin).thumbUp(n)
  *
  * 参考: https://github.com/xiaotian2333/yunzai-plugins-Single-file/blob/main/%E7%82%B9%E8%B5%9E%E7%BB%AD%E7%81%AB.js
