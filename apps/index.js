@@ -12,6 +12,7 @@ import * as cookie from '../lib/cookie.js'
 import { getTaskGroups, getStats } from '../lib/conf-loader.js'
 import { runTask } from '../executor/task-runner.js'
 import { scheduleAll, stopAll } from '../executor/scheduler.js'
+import { getSkey as _getSkey, gtk as _gtk } from '../lib/crypto.js'
 
 // 尝试加载 Yunzai plugin 基类 (运行时才有,开发测试时不存在)
 // 参考 yeqiu6080/yunzai-plugin-skill 5.2 插件基类使用
@@ -68,6 +69,7 @@ export class QqLevelPlugin extends plugin {
         { reg: '^#qq重载配置\\s*$', fnc: 'qqReloadConfig' },
         { reg: '^#qq签到帮助\\s*$', fnc: 'qqHelp' },
         { reg: '^#qq帮助\\s*$', fnc: 'qqHelp' },
+        { reg: '^#qq调试\\s+(\\S+)\\s*$', fnc: 'qqDebug', permission: 'master' },
       ],
     })
   }
@@ -417,6 +419,39 @@ export class QqLevelPlugin extends plugin {
       '#qq签到帮助           - 本帮助', '',
       `支持的登录域: ${Object.keys(LOGIN_DOMAINS).join(', ')}`,
     ].join('\n'))
+    return true
+  }
+
+  async qqDebug(e) {
+    const id = (e.msg.match(/^#qq调试\s+(\S+)$/) || [])[1]
+    if (!id) return e.reply('用法: #qq调试 <任务ID>')
+    const groups = getTaskGroups()
+    let found = null, grp = null
+    for (const g of groups) {
+      const t = (g.tasks || []).find(x => x.id === id) || (g.preTasks || []).find(x => x.id === id)
+      if (t) { found = t; grp = g; break }
+    }
+    if (!found) return e.reply('找不到任务: ' + id)
+    const cookies = cookie.readAll()
+    const uins = Object.keys(cookies)
+    if (uins.length === 0) return e.reply('请先 #qq登录')
+    const uin = uins[0]
+    const uinDisplay = uin.replace(/^0+/, '') || '0'
+    const lines = [`🔍 调试任务: ${id}`, `类型: ${found.type || 'web'}`, `URL: ${found.reqUrl}`, `Method: ${found.reqMethod}`, `Domain: ${found.domain || '(auto)'}`, `Cron: ${found.cron || '(无)'}`, `Relay: ${found.relay || '(无)'}`, `Rear: ${found.rear || '(无)'}`, `Enabled: ${Data.getTaskEnabled(found.id)}`, '']
+    // env 调试
+    const allCks = cookie.getAll(uin)
+    const skey = _getSkey(allCks)
+    const ps_tk = _gtk(skey)
+    lines.push(`📋 Env (QQ ${uinDisplay}):`)
+    lines.push(`  uin: ${uin}`)
+    lines.push(`  skey: ${skey ? skey.slice(0, 10) + '...' : '(空)'}`)
+    lines.push(`  ps_tk: ${ps_tk}`)
+    lines.push(`  qua: V1_IPH_SQ_9.1.0_0_TIM_YYB_9.1.0_8_a52b32d3`)
+    // Cookie 调试
+    const ckObj = cookie.get(uin, found.domain) || cookie.get(uin, new URL(found.reqUrl.replace('xa://', 'https://') || 'https://qq.com').hostname) || {}
+    lines.push('', `🍪 Cookie (${found.domain}):`)
+    lines.push(`  ${ckObj && Object.keys(ckObj).length ? Object.entries(ckObj).map(([k,v]) => `${k}=${String(v).slice(0,15)}`).join('\n  ') : '(空 - 该域未登录)'}`)
+    await e.reply(lines.join('\n'))
     return true
   }
 
