@@ -10,6 +10,7 @@
 import { format } from '../lib/env-format.js'
 import { post as httpPost, get as httpGet } from '../lib/http.js'
 import * as cookie from '../lib/cookie.js'
+import { isGroupAllowed } from '../lib/config.js'
 
 const HANDLERS = {}
 
@@ -58,6 +59,8 @@ register('GroupSignInManager/signIn', async (task, env, ctx, query) => {
       targetGroups = (list || []).map(g => g.group_id || g)
     }
   }
+  // 应用白名单/黑名单
+  targetGroups = filterGroups(targetGroups.map(String))
 
   if (targetGroups.length === 0) {
     return { ok: false, msg: '未指定打卡群，且 bot 没有群列表' }
@@ -123,6 +126,8 @@ register('GroupLuckyWordManager/draw', async (task, env, ctx, query) => {
       for (const gid of bot.gl.keys()) groups.push(String(gid))
     }
   }
+  // 应用白名单/黑名单
+  groups = filterGroups(groups)
 
   const ckObj = cookie.get(uin, 'qun.qq.com') || cookie.get(uin, 'global') || {}
   const bkn = (() => {
@@ -183,6 +188,8 @@ register('SendMessageManager/sendMessage/group', async (task, env, ctx, query) =
   if (groups.length === 0 && bot.gl) {
     groups = [...bot.gl.keys()].map(String)
   }
+  // 应用白名单/黑名单
+  groups = filterGroups(groups)
 
   // 续火文案 (按优先级): task.envs.message → query.msg → 远程诗词 API → 默认 '火'
   let msg = query.msg || env.message || ''
@@ -247,7 +254,9 @@ register('GroupXuhuoManager/run', async (task, env, ctx, query) => {
 
   // 2. 遍历 bot 的群
   if (!bot.gl) return { ok: false, msg: 'bot.gl 不可用' }
-  const groupList = [...bot.gl.keys()].map(String).filter(g => !blacklist.includes(g))
+  let groupList = [...bot.gl.keys()].map(String).filter(g => !blacklist.includes(g))
+  // 应用 config.yaml 的白名单/黑名单
+  groupList = filterGroups(groupList)
 
   const results = []
   for (const gid of groupList) {
@@ -517,6 +526,13 @@ register('FavoriteManager/favoriteAllVoter', async (task, env, ctx, query) => {
   const okCount = results.filter(r => r.ok).length
   return { ok: okCount > 0, data: results, summary: `${okCount}/${results.length} 回赞成功` }
 })
+
+/**
+ * 过滤群列表:根据 config.yaml 的 whitelist/blacklist
+ */
+function filterGroups(groupIds) {
+  return groupIds.filter(id => isGroupAllowed(id))
+}
 
 /**
  * 主入口：解析 URL，分发 handler

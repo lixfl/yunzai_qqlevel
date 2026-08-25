@@ -10,51 +10,51 @@
 
 ---
 
-## ✨ 功能矩阵
+## ✨ 功能
 
-### 通过 HTTP 实现（**真正可用**）
+### 任务规模
 
-| XAutoDaily 原版功能 | 实现状态 | 备注 |
-|---------------------|---------|------|
-| 频道签到 | ✅ | `type: web` |
-| QQ黄钻签到 + 3 个相关 | ✅ | `type: web` |
-| QQ打卡（左上角）/ QQ日签卡 | ✅ | `type: web` |
-| QQ字符抽取 | ✅ | `type: web` |
-| QQ等级相关（VIP / SVIP 任务） | ✅ | `type: web` |
-| 空间相关（签到/点赞/说说） | ✅ | `type: web` |
-| 大会员任务（分享/师徒/官网） | ✅ | `type: web` |
-| 超星会员 | ✅ | `type: web` |
-| QQ会员每日任务 | ✅ | `type: web` |
-| QQ超级会员任务 | ✅ | `type: web` |
-| 福利社领卷 | ✅ | `type: web` |
-| 王者营地任务 | ✅ | `type: web` (mini 部分降级) |
-| 300 英雄营地 | ✅ | `type: web` (mini 部分降级) |
-| QQ 音乐签到 | ✅ | `type: web` |
-| 个性装扮 / 微视 / 波点音乐 | ✅ | `type: web` |
-| **黄钻每日领取 / 大会员签到 / 续费** | ✅ | `type: web` |
+- **16 个任务组**，**57 个任务**（与 XAutoDaily v66 完全一致）
+- **45 个 web 任务**（HTTP） + **6 个 func 任务**（OneBot） + **6 个 mini 任务**
+- **多域 QR 登录**（qzone/qun/vip/mail/weiyun/accounts）
+- **群白名单/黑名单** + **群打卡/续火/抽字符**
+- **cron 自动调度** + **配置热重载**
 
-### 通过 OneBot 模拟（部分可用）
+### 命令速览（14 个）
 
-| 功能 | 实现状态 | 说明 |
-|------|---------|------|
-| 群打卡 OIDB 0xeb7 | ⚠️ 降级 | 通过 bot.sendGroupMsg 模拟；真正 OIDB 需要 QQ 客户端 |
-| 群组续火 | ✅ | 通过 bot.sendGroupMsg 发送续火消息 |
-| 好友续火 | ✅ | 通过 bot.sendPrivateMsg |
-| 公众号签到 | ⚠️ 降级 | 通过 bot.sendPrivateMsg |
-| 运动步数上报 | ⚠️ HTTP | 调用 YunDong Web 接口 |
+```bash
+# 一键
+#qq一键 / #qq一键签到 / #qq一键 all / #qq全部
 
-### **无法实现**（需要 Xposed Hook）
+# 登录
+#qq登录 [domain] / #qq登录 all / #qq登录 列表 / #qq刷新ck
+
+# Cookie / 任务
+#qqck
+#qq签到 / #qq任务列表 / #qq任务详情 <id>
+#qq启用任务 <id> / #qq禁用任务 <id>
+
+# 配置
+#qq配置 / #qq重载配置
+
+# 帮助
+#qq签到帮助
+```
+
+### 实现状态
+
+| 类别 | 数量 | 实现 |
+|------|------|------|
+| HTTP 任务 | 45 | ✅ 真正可用 |
+| OneBot 模拟任务 | 6 | ✅ 真正可用（用 icqq Yunzai API） |
+| 小程序任务 | 6 | ⚠️ 仅 HTTP 部分 |
+
+### 无法实现（需要 Xposed Hook）
 
 | 功能 | 说明 |
 |------|------|
-| 好友名片点赞 / 回赞 | 需要 OIDB 0x5eb/0x8fc |
-| 好友名片点赞（FavoriteManager） | 需要内部接口 |
 | QZone 亲密空间签到 | 需要 ViewModel 调用 |
-| QQ 运动步数精确上报 | 需要 mobileqq_mp 协议 |
-| 新版 OIDB 0xeb7 群打卡 | 需要 QQ 客户端 |
 | 部分小程序签到 | 需要 miniAppId 登录态 |
-
-> **结论：能用的有 60+ 个 HTTP 任务，10+ 个 OneBot 模拟任务，10 个 func 任务降级或留空。**
 
 ---
 
@@ -118,6 +118,70 @@ pnpm install   # 或 npm install
 
 启用状态保存到 `data/tasks-state.json`，默认全部启用。
 
+**默认时间已错开**（避免 0 点服务器拥塞）：
+
+```
+07:30 加好友活跃    15:30 空间说说任务
+08:00 群打卡        18:00 波点音乐听歌
+09:30 群组续火      20:00 QQ晚安卡 / 步数
+10:15 频道签到      21:00 大会员个性点赞
+11:45 日签卡打卡    00:00 19 个每日任务
+12:00 好友续火花    每月 1/5/24 号 月度任务
+13:20 连续登陆QQ    每周一 周度任务
+14:00 福利社领券
+```
+
+用户可通过 `config/config.yaml` 覆盖每个任务的执行时间（见下文）。
+
+---
+
+## ⚙️ 自定义配置
+
+用户配置位于 `config/config.yaml`（首次启动自动从 `config.example.yaml` 复制）。
+
+### 时间配置
+
+```yaml
+# 简化格式 "HH:MM" — 每天固定时间
+taskCronOverrides:
+  群打卡: "08:00"
+  群组续火: "09:30"
+  
+# 完整 cron (6 段)
+  QQ晚安卡: "0 0 20 * * *"
+  
+# 禁用定时（但仍可通过 #qq签到 手动执行）
+  波点音乐听歌: disable
+```
+
+### 群白名单/黑名单
+
+```yaml
+whitelist:
+  - 123456789    # 只对这些群续火/打卡
+
+blacklist:
+  - 987654321    # 这些群永不执行
+```
+
+### 任务启用覆盖
+
+```yaml
+taskOverrides:
+  群打卡: true        # 强制启用（覆盖 #qq禁用任务）
+  波点音乐听歌: false # 强制禁用（覆盖 #qq启用任务）
+```
+
+### 抽字符
+
+```yaml
+luckyChar:
+  enabled: true
+  isSVIP: true        # bot 是 SVIP 时,每群可抽 3 次
+```
+
+修改后用 `#qq重载配置` 立即生效，无需重启 Yunzai。
+
 ---
 
 ## 📁 项目结构
@@ -125,31 +189,30 @@ pnpm install   # 或 npm install
 ```
 yunzai_qqlevel/
 ├── index.js                # 插件入口（命令 + cron 注册）
-├── config.json             # 基础配置
 ├── package.json
 ├── LICENSE
 ├── README.md
 ├── conf/
 │   └── xa_conf.yaml       # XAutoDaily 任务配置（已解密，v66）
+├── config/
+│   ├── config.example.yaml # 配置示例（git 跟踪）
+│   └── config.yaml        # 用户配置（git 忽略,首次启动自动创建）
 ├── lib/
 │   ├── crypto.js          # xa_conf 解密 / GTK 计算 / ptqrtoken
 │   ├── conf-loader.js     # YAML 解析
 │   ├── cookie.js          # 多账号 cookie 管理
 │   ├── http.js            # HTTPS 工具
 │   ├── login.js           # QR 登录
-│   └── env-format.js      # XAutoDaily EnvFormatUtil 移植
+│   ├── env-format.js      # XAutoDaily EnvFormatUtil 移植
+│   └── config.js          # 用户配置加载 + 热重载
 ├── executor/
 │   ├── task-runner.js     # 通用任务执行器
 │   ├── onebot-func.js     # Function 任务 → OneBot API
 │   └── scheduler.js       # cron 调度
-├── data/
-│   ├── cookies.json       # 持久化 cookie
-│   ├── tasks-state.json   # 任务启用状态
-│   └── qr/                # 临时二维码图片
-└── tasks/                 # 旧的占位（保留兼容）
-    ├── daily.js
-    ├── group.js
-    └── miniapp.js
+└── data/
+    ├── cookies.json       # 持久化 cookie
+    ├── tasks-state.json   # 任务启用状态
+    └── qr/                # 临时二维码图片
 ```
 
 ---

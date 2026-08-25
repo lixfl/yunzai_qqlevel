@@ -7,7 +7,7 @@
 import cron from 'node-cron'
 import { getTaskGroups } from '../lib/conf-loader.js'
 import { runTask } from './task-runner.js'
-import { resolveTaskCron, loadConfig, isTaskEnabledByConfig } from '../lib/config.js'
+import { resolveTaskCron, loadConfig } from '../lib/config.js'
 
 const _tasks = []
 
@@ -18,6 +18,15 @@ const _tasks = []
  */
 export function scheduleTask(task, ctx) {
   if (!task.cron || task.cron === 'basic') return null
+
+  // 0. 检查 taskOverrides - 如果在 config.yaml 中显式设为 false,直接跳过
+  const cfg = loadConfig()
+  if (cfg.taskOverrides && Object.prototype.hasOwnProperty.call(cfg.taskOverrides, task.id)) {
+    if (cfg.taskOverrides[task.id] === false) {
+      console.log(`[xa] ${task.id}: 已禁用 (config.yaml taskOverrides)`)
+      return null
+    }
+  }
 
   // 1. 先尝试 config 中的覆盖
   const override = resolveTaskCron(task.id)
@@ -39,6 +48,12 @@ export function scheduleTask(task, ctx) {
   }
   const handle = cron.schedule(expr, async () => {
     console.log(`[xa] cron 触发: ${task.id} (${expr})`)
+    // 触发前再次检查（防止用户在 config.yaml 中运行时禁用）
+    const cfg2 = loadConfig()
+    if (cfg2.taskOverrides && cfg2.taskOverrides[task.id] === false) {
+      console.log(`[xa] ${task.id}: 运行时被禁用,跳过`)
+      return
+    }
     const r = await runTask(task, ctx)
     console.log(`[xa] ${task.id} 结果:`, r.ok ? 'OK' : r.msg)
   })

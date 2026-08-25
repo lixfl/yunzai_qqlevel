@@ -64,7 +64,8 @@ function parseListVar(value) {
 }
 
 /**
- * 解析 env 字符串"u1|u2|u3"或"u1,u2,u3"
+ * 解析 env 字符串"u1|u2|u3"
+ * 不再用 , 分割（避免误判"8,5"为数组）
  */
 function parseEnvValue(env) {
   const out = { ...env }
@@ -72,8 +73,6 @@ function parseEnvValue(env) {
     const v = out[e]
     if (typeof v === 'string' && v.includes('|')) {
       out[e] = v.split('|').map(s => s.trim()).filter(Boolean)
-    } else if (typeof v === 'string' && /\d/.test(v) && /,\d/.test(v)) {
-      out[e] = v.split(',').map(s => s.trim()).filter(Boolean)
     }
   }
   return out
@@ -177,7 +176,6 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 export async function runTaskGroup(group, ctx = {}) {
   const out = []
   for (const task of (group.tasks || [])) {
-    if (task.enable === false) continue
     for (const pre of (group.preTasks || [])) {
       out.push(await runTask(pre, ctx))
     }
